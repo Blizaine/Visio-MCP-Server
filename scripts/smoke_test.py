@@ -75,15 +75,25 @@ async def run() -> None:
             tools = await session.list_tools()
             tool_names = sorted(t.name for t in tools.tools)
             print(f"Tools advertised: {tool_names}")
-            expected = {"add_shape", "add_text", "close_document",
-                        "connect_shapes", "create_visio_file",
-                        "list_shapes", "open_visio_file"}
+            expected = {"add_page", "add_shape", "add_text", "close_document",
+                        "connect_shapes", "create_visio_file", "delete_page",
+                        "duplicate_page", "list_pages", "list_shapes",
+                        "open_visio_file", "set_active_page"}
             missing = expected - set(tool_names)
             if missing:
                 raise SystemExit(f"FAIL: tools missing from server: {missing}")
 
             await _expect_ok(session, "create_visio_file", {"save_path": test_path})
 
+            # Sanity-check the new doc's starting page list.
+            data = await _expect_ok(session, "list_pages", {"file_path": test_path})
+            initial_pages = data["pages"]
+            if len(initial_pages) != 1:
+                raise SystemExit(f"FAIL: new document should have 1 page, got {len(initial_pages)}")
+            page1_name = initial_pages[0]["name"]
+            print(f"\nInitial page: {page1_name!r}")
+
+            # Original flowchart, drawn on page 1 by default.
             data = await _expect_ok(session, "add_shape", {
                 "file_path": test_path, "shape_type": "Rectangle",
                 "x": 2.0, "y": 2.0, "width": 1.5, "height": 1.0,
@@ -111,21 +121,78 @@ async def run() -> None:
 
             data = await _expect_ok(session, "list_shapes", {"file_path": test_path})
             shape_count = len(data.get("shapes", []))
-            print(f"\nlist_shapes reports {shape_count} shapes on the page")
             if shape_count < 3:
                 raise SystemExit(
-                    f"FAIL: expected at least 3 shapes (2 rectangles/circles + 1 connector), got {shape_count}"
+                    f"FAIL: expected at least 3 shapes on {page1_name!r}, got {shape_count}"
                 )
+
+            # Phase 3 coverage: add a second page and draw on it explicitly.
+            data = await _expect_ok(session, "add_page", {
+                "file_path": test_path, "name": "Page 2",
+                "width": 11.0, "height": 8.5,
+            })
+            page2_name = data["name"]
+
+            data = await _expect_ok(session, "list_pages", {"file_path": test_path})
+            if len(data["pages"]) != 2:
+                raise SystemExit(f"FAIL: expected 2 pages after add_page, got {len(data['pages'])}")
+
+            data = await _expect_ok(session, "add_shape", {
+                "file_path": test_path, "shape_type": "Rectangle",
+                "x": 3.0, "y": 3.0, "width": 2.0, "height": 1.0,
+                "page_name": page2_name,
+            })
+            page2_shape_id = data["shape_id"]
+            if data.get("page_name") != page2_name:
+                raise SystemExit(f"FAIL: add_shape on {page2_name!r} reported page_name={data.get('page_name')!r}")
+
+            await _expect_ok(session, "add_text", {
+                "file_path": test_path, "shape_id": page2_shape_id, "text": "On Page 2",
+                "page_name": page2_name,
+            })
+
+            data = await _expect_ok(session, "list_shapes", {
+                "file_path": test_path, "page_name": page2_name,
+            })
+            page2_shapes = data["shapes"]
+            if len(page2_shapes) != 1 or page2_shapes[0]["text"] != "On Page 2":
+                raise SystemExit(f"FAIL: page 2 should have 1 shape with text 'On Page 2', got {page2_shapes}")
+
+            # duplicate the second page and verify count
+            data = await _expect_ok(session, "duplicate_page", {
+                "file_path": test_path, "source_page_name": page2_name,
+                "new_name": "Page 2 Copy",
+            })
+            copy_name = data["new_name"]
+
+            data = await _expect_ok(session, "list_pages", {"file_path": test_path})
+            if len(data["pages"]) != 3:
+                raise SystemExit(f"FAIL: expected 3 pages after duplicate, got {len(data['pages'])}")
+
+            # set_active_page back to the first page
+            await _expect_ok(session, "set_active_page", {
+                "file_path": test_path, "page_name": page1_name,
+            })
+
+            # delete the duplicate
+            await _expect_ok(session, "delete_page", {
+                "file_path": test_path, "page_name": copy_name,
+            })
+
+            data = await _expect_ok(session, "list_pages", {"file_path": test_path})
+            if len(data["pages"]) != 2:
+                raise SystemExit(f"FAIL: expected 2 pages after delete, got {len(data['pages'])}")
 
             await _expect_ok(session, "close_document", {
                 "file_path": test_path, "save_changes": True,
             })
 
-    print(f"\nSUCCESS — all tools exercised. File saved at: {test_path}")
+    print(f"\nSUCCESS - all tools exercised. File saved at: {test_path}")
     print("Open it in Visio and verify visually:")
-    print("  - one rectangle labeled 'Start' (left)")
-    print("  - one circle labeled 'End' (right)")
-    print("  - a STRAIGHT connector between them (must be visible — this checks the LinePattern fix)")
+    print(f"  - Page '{page1_name}': rectangle 'Start' (left), circle 'End' (right),")
+    print("    with a STRAIGHT connector between them (must be visible).")
+    print(f"  - Page 'Page 2': rectangle 'On Page 2'.")
+    print("  - Only 2 pages should remain (the duplicate was deleted).")
 
 
 if __name__ == "__main__":

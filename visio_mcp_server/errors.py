@@ -44,6 +44,10 @@ class ShapeNotFound(VisioMCPError):
     code = "SHAPE_NOT_FOUND"
 
 
+class PageNotFound(VisioMCPError):
+    code = "PAGE_NOT_FOUND"
+
+
 class VisioUnavailable(VisioMCPError):
     code = "VISIO_UNAVAILABLE"
 

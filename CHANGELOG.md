@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 3 — page support)
+- `list_pages(file_path)` — returns each page's index, name, dimensions
+  (inches), and background flag.
+- `add_page(file_path, name?, width?, height?, background?)` — appends a
+  page. Optional name, dimensions in inches, and a `background` flag for
+  backdrop pages.
+- `delete_page(file_path, page_name)` — refuses to delete the last
+  remaining page (Visio requires at least one).
+- `set_active_page(file_path, page_name)` — makes a page the active one in
+  Visio's window; locates the right window for the document first so this
+  works in multi-document workflows.
+- `duplicate_page(file_path, source_page_name, new_name?)` — copies a page
+  including shapes and properties; optionally renames the duplicate.
+- Every existing shape tool (`add_shape`, `connect_shapes`, `add_text`,
+  `list_shapes`) now accepts an optional `page_name`. When omitted the
+  active page is used.
+
+### Changed (Phase 3)
+- `DocumentHandle.active_page` (property) replaced with
+  `DocumentHandle.get_page(page_name=None)`. Default behavior also fixes a
+  latent bug: previously the tools always used `Application.ActivePage`,
+  which is global — in a multi-document workflow this could edit the
+  wrong document's page. The new default returns the active page only
+  when it belongs to *this* document, falling back to the document's
+  first page otherwise.
+- All shape-tool responses now include a `page_name` field so callers can
+  confirm which page their operation targeted.
+- Package version 2.0.0 → 2.1.0 (additive — new tools + new optional
+  parameters; no breaking changes).
+- New error code `PAGE_NOT_FOUND` for `page_name` lookups that miss.
+
 ### Added (sharing prep)
 - `BOOTSTRAP.md` — colleague-facing install guide. Covers prerequisites,
   the uv-based automated install, manual step-by-step fallback, MCP client

@@ -16,7 +16,7 @@ import os
 import time
 from typing import Optional
 
-from ..errors import ComError, VisioFileNotFound
+from ..errors import ComError, PageNotFound, VisioFileNotFound
 from .app import get_visio_app
 
 logger = logging.getLogger("visio_mcp.com.document")
@@ -57,16 +57,33 @@ class DocumentHandle:
                 logger.warning("save before close failed for %s: %s", self.path, e)
         self.com_doc.Close()
 
-    @property
-    def active_page(self):
-        """The currently-active page for this document's window.
+    def get_page(self, page_name: Optional[str] = None):
+        """Resolve a page on this document.
 
-        Note: with multiple documents open, this still relies on
-        `Application.ActivePage` for now (Phase 3 will add explicit page
-        targeting). Single-document workflows are unaffected.
+        - `page_name=None`: returns Application.ActivePage if it belongs to
+          this document, otherwise falls back to this document's first page.
+          The fallback fixes a latent bug where a multi-doc workflow could
+          edit the wrong document's page.
+        - `page_name="Foo"`: looks up by name (case-sensitive on Visio's side);
+          raises PageNotFound if not present.
         """
+        if page_name is not None:
+            try:
+                return self.com_doc.Pages.ItemU(page_name)
+            except Exception:
+                raise PageNotFound(
+                    f"Page '{page_name}' not found in document",
+                    details={"document": self.path, "page_name": page_name},
+                )
+
         app = get_visio_app()
-        return app.ActivePage
+        try:
+            active = app.ActivePage
+            if active is not None and active.Document.FullName == self.com_doc.FullName:
+                return active
+        except Exception:
+            pass
+        return self.com_doc.Pages.Item(1)
 
 
 def create_document(template_path: Optional[str], save_path: str) -> DocumentHandle:

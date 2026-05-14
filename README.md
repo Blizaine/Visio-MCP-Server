@@ -75,6 +75,10 @@ The server provides the following functionality:
 - Add text to shapes
 - List all shapes in a document
 
+### Page Management
+- List, add, delete, duplicate, and activate pages
+- Every shape tool accepts an optional `page_name` to target a specific page
+
 ### File Operations
 - Save documents to specified locations
 - Close documents safely
@@ -131,7 +135,8 @@ Error codes currently emitted:
 | Code | When |
 | --- | --- |
 | `FILE_NOT_FOUND` | The Visio file at the given path doesn't exist (and the tool doesn't auto-create). |
-| `SHAPE_NOT_FOUND` | A requested shape ID isn't on the active page. |
+| `SHAPE_NOT_FOUND` | A requested shape ID isn't on the target page. |
+| `PAGE_NOT_FOUND` | A requested `page_name` isn't in the document. |
 | `VISIO_UNAVAILABLE` | Visio couldn't be launched (not installed, COM blocked, etc.). |
 | `COM_ERROR` | A Visio COM call failed during a save/open/create. |
 | `INVALID_ARGUMENT` | Reserved for future validation; not yet emitted by current tools. |
@@ -207,13 +212,25 @@ Adds text to a shape in a Visio diagram.
 ```
 
 ### List Shapes
-Lists all shapes in a Visio diagram.
+Lists all shapes on a page of a Visio diagram.
 
 ```json
 {
-  "file_path": "Path to the Visio file"
+  "file_path": "Path to the Visio file",
+  "page_name": "[optional] Name of the page; defaults to the active page"
 }
 ```
+
+### Page Tools
+
+All shape tools above accept an optional `"page_name"` argument; omit it
+to target the active page. In addition:
+
+- **`list_pages`** — `{"file_path": "..."}` → returns `{"pages": [{"index", "name", "width", "height", "background"}]}`.
+- **`add_page`** — `{"file_path", "name"?, "width"?, "height"?, "background"?}`. Width/height in inches; if omitted, uses the document defaults.
+- **`delete_page`** — `{"file_path", "page_name"}`. Refuses to delete the last remaining page.
+- **`set_active_page`** — `{"file_path", "page_name"}`. Activates the page in Visio's window.
+- **`duplicate_page`** — `{"file_path", "source_page_name", "new_name"?}`. Copies the page including all shapes.
 
 ## Usage Example
 
