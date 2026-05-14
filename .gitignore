@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Generated MCP config (produced by setup_mcp.py; contains machine-specific paths)
+mcp-config.json

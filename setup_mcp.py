@@ -15,8 +15,8 @@ def check_prerequisites():
     """
     # Check Python version
     python_version = sys.version_info
-    python_ok = python_version.major >= 3 and python_version.minor >= 8
-    
+    python_ok = python_version.major >= 3 and python_version.minor >= 10
+
     # Check if uv/uvx is installed
     uv_installed = shutil.which("uv") is not None
     uvx_installed = shutil.which("uvx") is not None
@@ -40,18 +40,18 @@ def setup_venv():
     Function to set up Python virtual environment
     
     Features:
-    - Checks if Python version meets requirements (3.12+)
+    - Checks if Python version meets requirements (3.10+)
     - Creates Python virtual environment (if it doesn't exist)
     - Installs required dependencies in the newly created virtual environment
-    
+
     No parameters required
-    
+
     Returns: Path to Python interpreter in the virtual environment
     """
     # Check Python version
     python_version = sys.version_info
-    if python_version.major < 3 or (python_version.major == 3 and python_version.minor < 8):
-        print("Error: Python 3.12 or higher is required.")
+    if python_version.major < 3 or (python_version.major == 3 and python_version.minor < 10):
+        print("Error: Python 3.10 or higher is required.")
         sys.exit(1)
     
     # Get absolute path of the directory containing the current script
@@ -281,7 +281,7 @@ if __name__ == '__main__':
     python_ok, uv_installed, uvx_installed, visio_server_installed = check_prerequisites()
     
     if not python_ok:
-        print("Error: Python 3.12 or higher is required.")
+        print("Error: Python 3.10 or higher is required.")
         sys.exit(1)
     
     print("Visio MCP Server Setup")

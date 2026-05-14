@@ -8,12 +8,10 @@ It uses the Microsoft.Office.Interop.Visio API via Python's win32com interface.
 import os
 import sys
 import json
-import glob
-import tempfile
 import atexit
 import time
 import winreg
-from typing import Dict, Any, List, Optional
+from typing import Optional
 import win32com.client
 from mcp.server.fastmcp import FastMCP
 

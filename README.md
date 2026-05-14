@@ -16,7 +16,7 @@ Visio MCP Server allows you to automate Visio diagram creation and editing using
 
 - Windows operating system
 - Microsoft Visio (Professional or Standard) installed
-- Python 3.12+
+- Python 3.10+
 - Python packages:
   - `mcp.server`
   - `win32com.client` (pywin32)
@@ -35,7 +35,7 @@ pip install mcp-server
 4. Run the server:
 
 ```bash
-python visio_mcp_server.py
+python -m visio_mcp_server.visio_server
 ```
 
 ## Features
@@ -54,8 +54,9 @@ The server provides the following functionality:
 
 ### File Operations
 - Save documents to specified locations
-- Export diagrams as images
 - Close documents safely
+
+> Image/PDF export is on the roadmap (see "Future Features" below) but not yet implemented.
 
 ## MCP Configuration
 
@@ -66,9 +67,9 @@ Add the server to your MCP settings configuration file:
 ```json
 {
   "mcpServers": {
-    "ppt": {
+    "visio-server": {
       "command": "python",
-      "args": ["/path/to/ppt_mcp_server.py"],
+      "args": ["-m", "visio_mcp_server.visio_server"],
       "env": {}
     }
   }
@@ -82,7 +83,7 @@ If you have `uvx` installed, you can run the server directly from PyPI without l
 ```json
 {
   "mcpServers": {
-    "ppt": {
+    "visio-server": {
       "command": "uvx",
       "args": [
         "--from", "office-visio-mcp-server", "visio_mcp_server"
