@@ -158,6 +158,18 @@ def forget_document(file_path: str) -> None:
     _open_documents.pop(key, None)
 
 
+def find_shape_on_page(page, shape_id: int):
+    """Return the Shape on `page` with the given ID, or None if absent.
+
+    Uses `Shapes.ItemFromID` which is O(1) in Visio (it hits the page's
+    internal ID->Shape map), unlike iterating `page.Shapes` which is O(n).
+    """
+    try:
+        return page.Shapes.ItemFromID(shape_id)
+    except Exception:
+        return None
+
+
 def close_all_documents() -> None:
     """Used by the atexit hook in com.app — best-effort close-everything."""
     for path, handle in list(_open_documents.items()):

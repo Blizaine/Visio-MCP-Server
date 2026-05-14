@@ -77,8 +77,10 @@ async def run() -> None:
             print(f"Tools advertised: {tool_names}")
             expected = {"add_page", "add_shape", "add_text", "close_document",
                         "connect_shapes", "create_visio_file", "delete_page",
-                        "duplicate_page", "list_pages", "list_shapes",
-                        "open_visio_file", "set_active_page"}
+                        "duplicate_page", "export_page", "export_pdf",
+                        "list_pages", "list_shapes", "open_visio_file",
+                        "set_active_page", "set_shape_fill", "set_shape_line",
+                        "set_shape_text_format"}
             missing = expected - set(tool_names)
             if missing:
                 raise SystemExit(f"FAIL: tools missing from server: {missing}")
@@ -183,14 +185,54 @@ async def run() -> None:
             if len(data["pages"]) != 2:
                 raise SystemExit(f"FAIL: expected 2 pages after delete, got {len(data['pages'])}")
 
+            # Phase 4 coverage: styling the page-1 shapes.
+            await _expect_ok(session, "set_shape_fill", {
+                "file_path": test_path, "shape_id": id1, "color": "#90CAF9",
+            })
+            await _expect_ok(session, "set_shape_line", {
+                "file_path": test_path, "shape_id": id2,
+                "color": "#1565C0", "weight": 2.5, "pattern": 1,
+            })
+            await _expect_ok(session, "set_shape_text_format", {
+                "file_path": test_path, "shape_id": id1,
+                "size": 16, "bold": True, "color": "#0D47A1", "align": "center",
+            })
+
+            # Phase 4 coverage: exports. Save outputs next to the source.
+            base = os.path.splitext(test_path)[0]
+            png_out = base + ".png"
+            pdf_out = base + ".pdf"
+
+            png_data = await _expect_ok(session, "export_page", {
+                "file_path": test_path, "output_path": png_out,
+            })
+            if png_data["bytes"] <= 0 or not os.path.exists(png_out):
+                raise SystemExit(f"FAIL: PNG export did not produce a file at {png_out}")
+            print(f"PNG size: {png_data['bytes']} bytes")
+
+            pdf_data = await _expect_ok(session, "export_pdf", {
+                "file_path": test_path, "output_path": pdf_out,
+            })
+            if pdf_data["bytes"] <= 0 or not os.path.exists(pdf_out):
+                raise SystemExit(f"FAIL: PDF export did not produce a file at {pdf_out}")
+            with open(pdf_out, "rb") as fh:
+                magic = fh.read(4)
+            if magic != b"%PDF":
+                raise SystemExit(f"FAIL: PDF magic bytes wrong: got {magic!r}")
+            print(f"PDF size: {pdf_data['bytes']} bytes, magic OK")
+
             await _expect_ok(session, "close_document", {
                 "file_path": test_path, "save_changes": True,
             })
 
-    print(f"\nSUCCESS - all tools exercised. File saved at: {test_path}")
-    print("Open it in Visio and verify visually:")
-    print(f"  - Page '{page1_name}': rectangle 'Start' (left), circle 'End' (right),")
-    print("    with a STRAIGHT connector between them (must be visible).")
+    print(f"\nSUCCESS - all tools exercised. Outputs:")
+    print(f"  .vsdx: {test_path}")
+    print(f"  .png:  {png_out}")
+    print(f"  .pdf:  {pdf_out}")
+    print("")
+    print("Open the .vsdx (or .png / .pdf) and verify visually:")
+    print(f"  - Page '{page1_name}': rectangle 'Start' (LIGHT BLUE fill, BOLD navy text, centered),")
+    print("    circle 'End' (NAVY outline at 2.5pt), with a STRAIGHT connector between them.")
     print(f"  - Page 'Page 2': rectangle 'On Page 2'.")
     print("  - Only 2 pages should remain (the duplicate was deleted).")
 

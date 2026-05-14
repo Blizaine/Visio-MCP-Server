@@ -7,17 +7,10 @@ from __future__ import annotations
 from typing import Optional
 
 from ..com.app import get_visio_app
-from ..com.document import ensure_document_open
+from ..com.document import ensure_document_open, find_shape_on_page
 from ..com.undo import undo_scope
 from ..errors import ShapeNotFound, envelope
 from ..server_instance import mcp
-
-
-def _find_shape(page, shape_id: int):
-    for shape in page.Shapes:
-        if shape.ID == shape_id:
-            return shape
-    return None
 
 
 @mcp.tool()
@@ -93,8 +86,8 @@ async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
     app = get_visio_app()
     page = handle.get_page(page_name)
 
-    shape1 = _find_shape(page, shape1_id)
-    shape2 = _find_shape(page, shape2_id)
+    shape1 = find_shape_on_page(page, shape1_id)
+    shape2 = find_shape_on_page(page, shape2_id)
     if shape1 is None or shape2 is None:
         raise ShapeNotFound(
             f"Could not find shapes with IDs {shape1_id} and {shape2_id}",
@@ -145,7 +138,7 @@ async def add_text(file_path: str, shape_id: int, text: str,
     handle = ensure_document_open(file_path)
     page = handle.get_page(page_name)
 
-    target = _find_shape(page, shape_id)
+    target = find_shape_on_page(page, shape_id)
     if target is None:
         raise ShapeNotFound(
             f"Could not find shape with ID {shape_id} on page '{page.Name}'",

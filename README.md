@@ -82,8 +82,14 @@ The server provides the following functionality:
 ### File Operations
 - Save documents to specified locations
 - Close documents safely
+- Export pages to images (PNG, JPG, SVG, BMP, TIF, EMF, WMF)
+- Export documents to PDF (full doc, current page, single page, or range)
 
-> Image/PDF export is on the roadmap (see "Future Features" below) but not yet implemented.
+### Shape Styling
+- Set fill color and pattern
+- Set outline color, weight (in points), and dash pattern
+- Set text font, size, color, bold/italic/underline, and horizontal alignment
+- Color input accepts `#RRGGBB`, `RGB(r,g,b)`, or named colors
 
 ## MCP Configuration
 
@@ -232,6 +238,21 @@ to target the active page. In addition:
 - **`set_active_page`** — `{"file_path", "page_name"}`. Activates the page in Visio's window.
 - **`duplicate_page`** — `{"file_path", "source_page_name", "new_name"?}`. Copies the page including all shapes.
 
+### Styling Tools
+
+Set visual properties on existing shapes. Color values accept
+`#RRGGBB`, `#RGB`, `RGB(r,g,b)`, or named colors (red, blue, green,
+yellow, cyan, magenta, gray, orange, purple, pink, brown, black, white).
+
+- **`set_shape_fill`** — `{"file_path", "shape_id", "color", "pattern"?, "page_name"?}`. Pattern 0=none, 1=solid (default), 2+=various hatches.
+- **`set_shape_line`** — `{"file_path", "shape_id", "color"?, "weight"?, "pattern"?, "page_name"?}`. Weight in points; pattern 0=no line, 1=solid, 2-23=dashes. Partial updates supported — pass only what you want to change.
+- **`set_shape_text_format`** — `{"file_path", "shape_id", "font"?, "size"?, "color"?, "bold"?, "italic"?, "underline"?, "align"?, "page_name"?}`. Size in points. `align` accepts "left", "center", "right", or "justify". Partial updates supported; bold/italic/underline toggle individually without disturbing the others.
+
+### Export Tools
+
+- **`export_page`** — `{"file_path", "output_path", "page_name"?}`. Single-page export; format inferred from the `output_path` extension (.png, .jpg, .jpeg, .gif, .bmp, .tif, .tiff, .svg, .emf, .wmf).
+- **`export_pdf`** — `{"file_path", "output_path", "page_range"?}`. Multi-page PDF. `page_range` accepts `null`/`"all"` (default), `"current"`, `"N"` (single page, 1-based), or `"N-M"` (inclusive range).
+
 ## Usage Example
 
 Here's a complete workflow example:
@@ -298,13 +319,12 @@ Here's a complete workflow example:
 The following features are planned for future releases:
 
 ### Enhanced Shape Styling
-- Color and fill pattern customization
-- Line weight, style, and color options
-- Text formatting (font, size, alignment)
 - Shadow and 3D effects
+- Gradient fills
+- True curved connectors (current "curved" routes as Dynamic)
 
 ### Advanced Visio Objects
-- Support for layers and pages
+- Layers
 - Group creation and manipulation
 - Container management
 - Text-only shapes and callouts
@@ -330,10 +350,8 @@ The following features are planned for future releases:
 - Validation against diagram rules
 
 ### Export Options
-- PDF export with options
-- SVG export for web use
-- PNG/JPG with custom resolution
-- Export specific pages or sections
+- PNG/JPG with custom resolution (current exports use the page's natural resolution)
+- Per-page PDF metadata (bookmarks, ISO 19005-1 compliance)
 
 ### Integration Capabilities
 - REST API wrapper

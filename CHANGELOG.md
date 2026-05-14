@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 4 — export and styling)
+- `export_page(file_path, output_path, page_name?)` — single-page export.
+  Format inferred from the output extension: `.png`, `.jpg`/`.jpeg`,
+  `.gif`, `.bmp`, `.tif`/`.tiff`, `.svg`, `.emf`, `.wmf`. Returns
+  `{output_path, page_name, format, bytes}`.
+- `export_pdf(file_path, output_path, page_range?)` — multi-page PDF
+  export via `Document.ExportAsFixedFormat`. Range accepts `None`/`"all"`,
+  `"current"`, `"N"`, or `"N-M"`. Returns `{output_path, page_range, bytes}`.
+- `set_shape_fill(file_path, shape_id, color, pattern?, page_name?)` —
+  writes `FillForegnd` and `FillPattern` cells.
+- `set_shape_line(file_path, shape_id, color?, weight?, pattern?, page_name?)`
+  — partial updates; weight is in points. Writes `LineColor`, `LineWeight`,
+  `LinePattern`.
+- `set_shape_text_format(file_path, shape_id, font?, size?, color?, bold?,
+  italic?, underline?, align?, page_name?)` — partial updates. `bold`,
+  `italic`, `underline` toggle only their bits on `Char.Style` so other
+  styles aren't clobbered. Writes `Char.Font`, `Char.Size`, `Char.Color`,
+  `Char.Style`, and `Para.HorzAlign`.
+- Color parser accepts `#RGB`, `#RRGGBB`, `RGB(r,g,b)`, `rgb(r,g,b)`, and a
+  small set of named colors (red/blue/green/.../pink/brown). All are
+  normalized to the `RGB(r,g,b)` formula written into the ShapeSheet.
+
+### Changed (Phase 4)
+- `_find_shape` (private to `tools/shapes.py`) replaced with a shared
+  `find_shape_on_page` helper in `com/document.py`. Now uses
+  `Shapes.ItemFromID(id)` — O(1) via Visio's internal index — instead of
+  iterating `page.Shapes` linearly.
+- Package version 2.1.0 → 2.2.0 (additive; no breaking changes).
+
 ### Added (Phase 3 — page support)
 - `list_pages(file_path)` — returns each page's index, name, dimensions
   (inches), and background flag.
