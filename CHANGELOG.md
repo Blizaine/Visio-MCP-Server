@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (sharing prep)
+- `BOOTSTRAP.md` — colleague-facing install guide. Covers prerequisites,
+  the uv-based automated install, manual step-by-step fallback, MCP client
+  configuration snippets for Claude Desktop and Claude Code, install
+  sources (git/PyPI/wheel/local), troubleshooting, and uninstall.
+- `scripts/bootstrap.ps1` — automated installer. Takes a `-Source`
+  parameter and runs end-to-end: verifies Visio, installs uv if missing,
+  installs CPython 3.12 via uv, `uv tool install`s the package, and prints
+  the MCP client config snippet. Does not modify the MCP client config
+  file directly (paste-it-yourself is safer than auto-merging JSON).
+- `scripts/smoke_test.py` (committed earlier in bc7ccf0) — end-to-end test
+  that drives every tool against a real Visio. Doubles as a colleague
+  verification step.
+
+### Changed
+- README's Installation section now recommends the uv-based path and
+  points at `BOOTSTRAP.md` for the colleague-facing rollout. The old
+  `pip install pywin32` flow is removed.
+
 ### Changed — BREAKING (Phase 2 — architecture refactor)
 - **Response format**: every tool now returns a JSON-encoded envelope
   `{"ok": bool, "data": ..., "error": {"code", "message", "details"} | null}`.

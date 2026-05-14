@@ -23,19 +23,42 @@ Visio MCP Server allows you to automate Visio diagram creation and editing using
 
 ## Installation
 
-1. Ensure Microsoft Visio is installed on your system
-2. Install required Python packages:
+The recommended path uses `uv` (Astral's Python tool manager) — no admin
+rights and no pre-installed Python required. See
+**[BOOTSTRAP.md](BOOTSTRAP.md)** for the colleague-facing full guide, plus
+troubleshooting for locked-down corporate environments.
 
-```bash
-pip install pywin32
-pip install mcp-server
+**Automated (from a clone of this repo):**
+
+```powershell
+scripts\bootstrap.ps1 -Source "<install-source>"
 ```
 
-3. Clone or download this repository
-4. Run the server:
+where `<install-source>` is the git URL, wheel path, PyPI name, or `.` for
+a local editable install. The script handles uv, Python, and the package
+itself; it prints the MCP client config snippet at the end.
 
-```bash
-python -m visio_mcp_server.visio_server
+**Local dev install (you have the source cloned):**
+
+```powershell
+# One-time: install uv
+powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Per-project
+uv venv
+uv pip install -e .
+```
+
+Run the server directly:
+
+```powershell
+.\.venv\Scripts\python.exe -m visio_mcp_server.visio_server
+```
+
+Verify the install with the included smoke test:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_test.py
 ```
 
 ## Features
