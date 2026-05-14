@@ -93,6 +93,31 @@ If you have `uvx` installed, you can run the server directly from PyPI without l
 }
 ```
 
+## Response Format
+
+Every tool returns a JSON string with a consistent envelope so clients can
+parse results uniformly:
+
+```json
+{ "ok": true,  "data": { /* tool-specific */ }, "error": null }
+{ "ok": false, "data": null, "error": { "code": "FILE_NOT_FOUND", "message": "...", "details": null } }
+```
+
+Error codes currently emitted:
+
+| Code | When |
+| --- | --- |
+| `FILE_NOT_FOUND` | The Visio file at the given path doesn't exist (and the tool doesn't auto-create). |
+| `SHAPE_NOT_FOUND` | A requested shape ID isn't on the active page. |
+| `VISIO_UNAVAILABLE` | Visio couldn't be launched (not installed, COM blocked, etc.). |
+| `COM_ERROR` | A Visio COM call failed during a save/open/create. |
+| `INVALID_ARGUMENT` | Reserved for future validation; not yet emitted by current tools. |
+| `INTERNAL` | Uncaught exception. The `message` includes the original exception type. |
+
+> **Breaking change (v2.0.0)**: prior versions returned plain strings like
+> `"Visio file created successfully at: ..."`. Clients that parsed those
+> strings need to switch to reading `data.path` on the envelope.
+
 ## API Reference
 
 ### Create a Visio File

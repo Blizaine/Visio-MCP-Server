@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — BREAKING (Phase 2 — architecture refactor)
+- **Response format**: every tool now returns a JSON-encoded envelope
+  `{"ok": bool, "data": ..., "error": {"code", "message", "details"} | null}`.
+  Previously tools returned ad-hoc plain strings like `"Visio file created
+  successfully at: ..."`. Clients that parsed those strings must switch to
+  reading the envelope. See the new "Response Format" section in the README.
+- **Package version**: 1.0.1 → 2.0.0 to reflect the breaking response shape.
+- **Module layout**: the 465-line `visio_server.py` monolith is split into
+  focused modules:
+  - `visio_mcp_server.server_instance` — the shared FastMCP instance
+  - `visio_mcp_server.errors` — exception hierarchy + `@envelope` decorator
+  - `visio_mcp_server.logging_setup` — stderr logging configuration
+  - `visio_mcp_server.com.app` — Visio application lifecycle + CoInitialize
+  - `visio_mcp_server.com.document` — `DocumentHandle` + open-doc registry
+  - `visio_mcp_server.com.undo` — `undo_scope` context manager
+  - `visio_mcp_server.tools.files` — create/open/close
+  - `visio_mcp_server.tools.shapes` — add/connect/text/list
+  `visio_mcp_server.visio_server:main` is preserved as the entry point so
+  the installed-script command and `python -m` invocation don't change.
+
+### Added (Phase 2)
+- `undo_scope(name)` context manager wraps every mutating tool. Partial
+  failures inside the block trigger `EndUndoScope(commit=False)`, rolling
+  the operation back. Clean exits commit normally.
+- Structured logging to stderr via the `visio_mcp` logger hierarchy. Level
+  is configurable through the `VISIO_MCP_LOG_LEVEL` environment variable
+  (default `INFO`). Stdout is never written to so the MCP stdio protocol
+  is unaffected.
+- `list_shapes` now returns shape positions/sizes in inches explicitly
+  (`Cell.Result("in")` instead of `Result("")`) and includes them as
+  numeric floats rather than strings.
+
 ### Fixed (Phase 1 — correctness)
 - `add_shape`, `connect_shapes`, `add_text`, and `list_shapes` no longer call
   each other through the `@mcp.tool()`-decorated wrappers. Business logic is

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "office-visio-mcp-server"
-version = "1.0.1"
+version = "2.0.0"
 description = "MCP server for manipulating Microsoft Visio documents"
 readme = "README.md"
 license = {file = "LICENSE"}
