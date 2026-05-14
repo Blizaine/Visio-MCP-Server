@@ -1,5 +1,16 @@
 """
 Shape-level tools: add, connect, text, list.
+
+The mutating tools here (`add_shape`, `connect_shapes`, `add_text`) no longer
+auto-save the document — call `save_document` when you want persistence, or
+rely on `close_document` to save on close. This change is a per-call latency
+win; together with the batch tools in `tools/batch.py` it makes building
+multi-shape diagrams several times faster.
+
+When you have more than one shape to handle, prefer the batch variants:
+- `add_shapes`            instead of multiple `add_shape` calls
+- `connect_shapes_bulk`   instead of multiple `connect_shapes` calls
+- `add_text` is fine for single edits; for bulk text changes use `style_shapes`
 """
 
 from __future__ import annotations
@@ -18,7 +29,13 @@ from ..server_instance import mcp
 async def add_shape(file_path: str, shape_type: str, x: float, y: float,
                     width: Optional[float] = 1.0, height: Optional[float] = 1.0,
                     page_name: Optional[str] = None) -> dict:
-    """Add a shape to a Visio document. Creates the file if it doesn't exist.
+    """Add a single shape to a Visio document. Creates the file if it doesn't exist.
+
+    Prefer `add_shapes` (plural) when adding more than one shape — it's
+    substantially faster because it makes one model round-trip instead of N
+    and disables screen redraw during the batch.
+
+    Does not auto-save; call `save_document` or `close_document`.
 
     Args:
         file_path: Path to the Visio file.
@@ -50,7 +67,6 @@ async def add_shape(file_path: str, shape_type: str, x: float, y: float,
         if shape is not None:
             shape.Text = shape_type
 
-    handle.save()
     return {
         "shape_id": int(shape.ID),
         "shape_type": shape_type,
@@ -67,7 +83,10 @@ async def add_shape(file_path: str, shape_type: str, x: float, y: float,
 async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
                          connector_type: Optional[str] = "Dynamic",
                          page_name: Optional[str] = None) -> dict:
-    """Connect two shapes with a connector.
+    """Connect two shapes with a single connector.
+
+    Prefer `connect_shapes_bulk` when adding more than one connection.
+    Does not auto-save; call `save_document` or `close_document`.
 
     Args:
         file_path: Path to the Visio file.
@@ -110,7 +129,6 @@ async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
         connector.Cells("BeginX").GlueTo(shape1.Cells("PinX"))
         connector.Cells("EndX").GlueTo(shape2.Cells("PinX"))
 
-    handle.save()
     return {
         "connector_id": int(connector.ID),
         "shape1_id": shape1_id,
@@ -124,7 +142,14 @@ async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
 @envelope("add_text")
 async def add_text(file_path: str, shape_id: int, text: str,
                    page_name: Optional[str] = None) -> dict:
-    """Set the text of a shape.
+    """Set the text of a single shape.
+
+    For setting text on many shapes at once, use `style_shapes` with a
+    `text` field on each update (it bundles styling and text). Or, if you
+    already know the shape IDs at creation time, include `text` directly
+    in the `add_shapes` call so you don't need a follow-up.
+
+    Does not auto-save; call `save_document` or `close_document`.
 
     Args:
         file_path: Path to the Visio file.
@@ -148,7 +173,6 @@ async def add_text(file_path: str, shape_id: int, text: str,
     with undo_scope("Set shape text"):
         target.Text = text
 
-    handle.save()
     return {"shape_id": shape_id, "page_name": page.Name}
 
 
@@ -156,6 +180,11 @@ async def add_text(file_path: str, shape_id: int, text: str,
 @envelope("list_shapes")
 async def list_shapes(file_path: str, page_name: Optional[str] = None) -> dict:
     """List all shapes on a page.
+
+    Use this BEFORE making bulk modifications to an existing diagram. The
+    full list (with IDs, text, position, size, type) lets you plan a single
+    batch update via `style_shapes`, `transform_shapes`, or `delete_shapes`
+    instead of probing shape-by-shape.
 
     Args:
         file_path: Path to the Visio file.

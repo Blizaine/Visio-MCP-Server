@@ -253,6 +253,27 @@ yellow, cyan, magenta, gray, orange, purple, pink, brown, black, white).
 - **`export_page`** — `{"file_path", "output_path", "page_name"?}`. Single-page export; format inferred from the `output_path` extension (.png, .jpg, .jpeg, .gif, .bmp, .tif, .tiff, .svg, .emf, .wmf).
 - **`export_pdf`** — `{"file_path", "output_path", "page_range"?}`. Multi-page PDF. `page_range` accepts `null`/`"all"` (default), `"current"`, `"N"` (single page, 1-based), or `"N-M"` (inclusive range).
 
+### Batch Tools (preferred for >1 shape)
+
+Strongly preferred over looping the single-shape tools when you have
+multiple operations to perform. One model round-trip, screen updates
+disabled during the batch, single undo scope, no per-op save — typically
+5-20x faster end-to-end.
+
+- **`add_shapes`** — `{"file_path", "shapes": [{"shape_type", "x", "y", "width"?, "height"?, "text"?}, ...], "page_name"?}`. Each entry mirrors `add_shape`'s parameters; `text` (optional) sets the shape's text inline so you don't need a separate `add_text` call.
+- **`connect_shapes_bulk`** — `{"file_path", "connections": [{"shape1_id", "shape2_id", "connector_type"?}, ...], "page_name"?}`.
+- **`style_shapes`** — `{"file_path", "updates": [{"shape_id", "fill"?, "line"?, "text"?, "text_format"?}, ...], "page_name"?}`. `fill` / `line` / `text_format` are sub-objects with the same shape as `set_shape_fill` / `set_shape_line` / `set_shape_text_format`. `text` sets `shape.Text` directly.
+- **`delete_shapes`** — `{"file_path", "shape_ids": [int, ...], "page_name"?}`. All-or-nothing: if any ID is missing, the whole batch rolls back.
+- **`transform_shapes`** — `{"file_path", "updates": [{"shape_id", "x"?, "y"?, "width"?, "height"?, "angle_degrees"?}, ...], "page_name"?}`. Move, resize, and/or rotate. Partial updates supported.
+
+### Persistence
+
+As of v2.3.0, the mutating single-shape and page tools no longer auto-save
+the document. This was the biggest hidden latency cost (~100-300ms per
+call for a re-zip + disk write). Call **`save_document(file_path)`**
+explicitly when you want the on-disk file in sync, or rely on
+`close_document` (saves by default on close).
+
 ## Usage Example
 
 Here's a complete workflow example:

@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 5 — batch tools and modify-existing CRUD)
+- `add_shapes(file_path, shapes=[...], page_name?)` — bulk shape creation.
+  Each item: `{shape_type, x, y, width, height, text?}`.
+- `connect_shapes_bulk(file_path, connections=[...], page_name?)` — bulk
+  connectors. Each item: `{shape1_id, shape2_id, connector_type?}`.
+- `style_shapes(file_path, updates=[...], page_name?)` — bulk fill / line /
+  text-format / text changes. Each item bundles whatever you want to
+  change on one shape: `{shape_id, fill?, line?, text?, text_format?}`.
+- `delete_shapes(file_path, shape_ids=[...], page_name?)` — bulk delete.
+  All-or-nothing: if any target is missing, the batch aborts and the undo
+  scope rolls back.
+- `transform_shapes(file_path, updates=[...], page_name?)` — bulk move /
+  resize / rotate. Each item: `{shape_id, x?, y?, width?, height?,
+  angle_degrees?}`. Partial updates supported.
+- `save_document(file_path)` — explicit save, replacing the auto-save that
+  used to fire after every mutating tool.
+
+### Changed (Phase 5)
+- **Mutating tools no longer auto-save** (`add_shape`, `connect_shapes`,
+  `add_text`, `add_page`, `delete_page`, `duplicate_page`, `set_shape_fill`,
+  `set_shape_line`, `set_shape_text_format`). Saving the .vsdx (re-zipping
+  XML and writing to disk) was ~100-300ms per call; for multi-step diagrams
+  that added significant latency. Call `save_document` explicitly when you
+  want persistence, or rely on `close_document` (still saves by default).
+  This is a semantic change but doesn't affect the response envelope, so
+  it's a minor bump.
+- Each batch tool wraps its work in a single `undo_scope` and disables
+  `Application.ScreenUpdating` for the duration — Visio doesn't repaint
+  between operations, dropping per-op latency further.
+- Docstrings on all single-shape tools (`add_shape`, `connect_shapes`,
+  `add_text`, `set_shape_fill`, `set_shape_line`, `set_shape_text_format`)
+  now explicitly direct callers toward the batch variants when handling
+  more than one shape.
+- Styling apply logic factored into reusable helpers (`apply_fill`,
+  `apply_line`, `apply_text_format`) in `tools/styling.py` so the single-
+  shape tools and the `style_shapes` batch share one source of truth.
+- Package version 2.2.0 → 2.3.0.
+
+### Performance
+Smoke-test measurement: building 7 shapes + 6 connectors + 7 style updates
+(20 operations) via batch tools takes ~0.34s of COM-side work. Previously
+the equivalent ~20 single-tool calls would have spent ~5 minutes on model
+round-trips alone (in addition to the COM work).
+
 ### Added (Phase 4 — export and styling)
 - `export_page(file_path, output_path, page_name?)` — single-page export.
   Format inferred from the output extension: `.png`, `.jpg`/`.jpeg`,

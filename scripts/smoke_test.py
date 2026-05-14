@@ -75,12 +75,14 @@ async def run() -> None:
             tools = await session.list_tools()
             tool_names = sorted(t.name for t in tools.tools)
             print(f"Tools advertised: {tool_names}")
-            expected = {"add_page", "add_shape", "add_text", "close_document",
-                        "connect_shapes", "create_visio_file", "delete_page",
+            expected = {"add_page", "add_shape", "add_shapes", "add_text",
+                        "close_document", "connect_shapes", "connect_shapes_bulk",
+                        "create_visio_file", "delete_page", "delete_shapes",
                         "duplicate_page", "export_page", "export_pdf",
                         "list_pages", "list_shapes", "open_visio_file",
-                        "set_active_page", "set_shape_fill", "set_shape_line",
-                        "set_shape_text_format"}
+                        "save_document", "set_active_page", "set_shape_fill",
+                        "set_shape_line", "set_shape_text_format",
+                        "style_shapes", "transform_shapes"}
             missing = expected - set(tool_names)
             if missing:
                 raise SystemExit(f"FAIL: tools missing from server: {missing}")
@@ -221,20 +223,114 @@ async def run() -> None:
                 raise SystemExit(f"FAIL: PDF magic bytes wrong: got {magic!r}")
             print(f"PDF size: {pdf_data['bytes']} bytes, magic OK")
 
+            # ---------------------------------------------------------------
+            # Phase 5 coverage: batch tools, delete, transform, explicit save.
+            # We build a second diagram entirely via batch tools and time it
+            # so the perf win is observable.
+            # ---------------------------------------------------------------
+            batch_path = os.path.join(
+                os.path.dirname(test_path),
+                f"visio_mcp_batch_{int(time.time())}.vsdx",
+            )
+
+            await _expect_ok(session, "create_visio_file", {"save_path": batch_path})
+
+            t0 = time.perf_counter()
+            # 5 boxes + 2 circles, all in one call.
+            batch_shapes = [
+                {"shape_type": "Rectangle", "x": 0.5, "y": 6.5, "width": 1.2, "height": 0.8, "text": "A"},
+                {"shape_type": "Rectangle", "x": 2.5, "y": 6.5, "width": 1.2, "height": 0.8, "text": "B"},
+                {"shape_type": "Rectangle", "x": 4.5, "y": 6.5, "width": 1.2, "height": 0.8, "text": "C"},
+                {"shape_type": "Rectangle", "x": 0.5, "y": 4.5, "width": 1.2, "height": 0.8, "text": "D"},
+                {"shape_type": "Rectangle", "x": 2.5, "y": 4.5, "width": 1.2, "height": 0.8, "text": "E"},
+                {"shape_type": "Circle",    "x": 4.5, "y": 4.5, "width": 1.0, "height": 1.0, "text": "F"},
+                {"shape_type": "Circle",    "x": 1.5, "y": 2.5, "width": 1.0, "height": 1.0, "text": "G"},
+            ]
+            data = await _expect_ok(session, "add_shapes", {
+                "file_path": batch_path, "shapes": batch_shapes,
+            })
+            shape_ids = [s["shape_id"] for s in data["shapes"]]
+            if len(shape_ids) != len(batch_shapes):
+                raise SystemExit(f"FAIL: add_shapes returned {len(shape_ids)} shapes, expected {len(batch_shapes)}")
+
+            # 6 connectors in one call.
+            connections = [
+                {"shape1_id": shape_ids[0], "shape2_id": shape_ids[1], "connector_type": "Straight"},
+                {"shape1_id": shape_ids[1], "shape2_id": shape_ids[2], "connector_type": "Straight"},
+                {"shape1_id": shape_ids[0], "shape2_id": shape_ids[3], "connector_type": "Straight"},
+                {"shape1_id": shape_ids[3], "shape2_id": shape_ids[4], "connector_type": "Straight"},
+                {"shape1_id": shape_ids[4], "shape2_id": shape_ids[5], "connector_type": "Straight"},
+                {"shape1_id": shape_ids[3], "shape2_id": shape_ids[6], "connector_type": "Straight"},
+            ]
+            await _expect_ok(session, "connect_shapes_bulk", {
+                "file_path": batch_path, "connections": connections,
+            })
+
+            # Style every shape blue with white bold text — in one call.
+            style_updates = [
+                {
+                    "shape_id": sid,
+                    "fill": {"color": "#1976D2"},
+                    "text_format": {"color": "#FFFFFF", "bold": True, "size": 14, "align": "center"},
+                }
+                for sid in shape_ids
+            ]
+            await _expect_ok(session, "style_shapes", {
+                "file_path": batch_path, "updates": style_updates,
+            })
+
+            elapsed = time.perf_counter() - t0
+            print(f"\n>>> Batch build of 7 shapes + 6 connectors + 7 styles: {elapsed:.2f}s")
+
+            # Explicit save (singles no longer auto-save).
+            await _expect_ok(session, "save_document", {"file_path": batch_path})
+
+            # transform_shapes: enlarge shape A and rotate it.
+            await _expect_ok(session, "transform_shapes", {
+                "file_path": batch_path,
+                "updates": [
+                    {"shape_id": shape_ids[0], "width": 2.0, "height": 1.2},
+                    {"shape_id": shape_ids[6], "x": 5.5, "y": 2.5, "angle_degrees": 45.0},
+                ],
+            })
+
+            # delete_shapes: remove G (the last circle).
+            data = await _expect_ok(session, "delete_shapes", {
+                "file_path": batch_path, "shape_ids": [shape_ids[6]],
+            })
+            if data["count"] != 1 or shape_ids[6] not in data["deleted_ids"]:
+                raise SystemExit(f"FAIL: delete_shapes didn't remove the expected shape: {data}")
+
+            # Verify the deletion stuck.
+            data = await _expect_ok(session, "list_shapes", {"file_path": batch_path})
+            remaining_ids = [s["id"] for s in data["shapes"]]
+            if shape_ids[6] in remaining_ids:
+                raise SystemExit(f"FAIL: deleted shape {shape_ids[6]} still in list_shapes")
+
+            await _expect_ok(session, "close_document", {
+                "file_path": batch_path, "save_changes": True,
+            })
+
             await _expect_ok(session, "close_document", {
                 "file_path": test_path, "save_changes": True,
             })
 
     print(f"\nSUCCESS - all tools exercised. Outputs:")
-    print(f"  .vsdx: {test_path}")
-    print(f"  .png:  {png_out}")
-    print(f"  .pdf:  {pdf_out}")
+    print(f"  .vsdx (singles):    {test_path}")
+    print(f"  .png:               {png_out}")
+    print(f"  .pdf:               {pdf_out}")
+    print(f"  .vsdx (batch built): {batch_path}")
     print("")
-    print("Open the .vsdx (or .png / .pdf) and verify visually:")
+    print("Open the single-tool .vsdx and verify visually:")
     print(f"  - Page '{page1_name}': rectangle 'Start' (LIGHT BLUE fill, BOLD navy text, centered),")
     print("    circle 'End' (NAVY outline at 2.5pt), with a STRAIGHT connector between them.")
     print(f"  - Page 'Page 2': rectangle 'On Page 2'.")
     print("  - Only 2 pages should remain (the duplicate was deleted).")
+    print("")
+    print("Open the batch-built .vsdx and verify visually:")
+    print("  - 6 blue shapes with bold white centered labels A-F (G was deleted).")
+    print("  - A is wider than the rest (transform_shapes resize).")
+    print("  - Connectors form a tree: A-B-C across the top, A-D-E-F down/right.")
 
 
 if __name__ == "__main__":

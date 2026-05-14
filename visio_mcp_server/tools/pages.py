@@ -77,7 +77,6 @@ async def add_page(file_path: str, name: Optional[str] = None,
         if height is not None:
             page.PageSheet.Cells("PageHeight").Formula = f"{float(height)} in"
 
-    handle.save()
     return {"name": page.Name, "index": int(page.Index)}
 
 
@@ -110,7 +109,6 @@ async def delete_page(file_path: str, page_name: str) -> dict:
         # Page.Delete(int): 0 = delete shapes too; 1 = delete just the page (default behavior).
         page.Delete(0)
 
-    handle.save()
     return {"deleted_name": deleted}
 
 
@@ -178,7 +176,6 @@ async def duplicate_page(file_path: str, source_page_name: str,
         if new_name is not None:
             copy.Name = new_name
 
-    handle.save()
     return {
         "source_name": source.Name,
         "new_name": copy.Name,

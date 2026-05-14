@@ -13,6 +13,7 @@ from typing import Optional
 
 from ..com.document import (
     create_document,
+    ensure_document_open,
     forget_document,
     get_open_document,
     open_document,
@@ -88,3 +89,25 @@ async def close_document(file_path: str, save_changes: Optional[bool] = True) ->
     handle.close(save_changes=bool(save_changes))
     forget_document(file_path)
     return {"path": file_path, "was_open": True}
+
+
+@mcp.tool()
+@envelope("save_document")
+async def save_document(file_path: str) -> dict:
+    """Persist any in-memory changes for an open Visio document.
+
+    As of v2.3.0, mutating tools (add_shape, set_shape_fill, transform_shapes,
+    etc.) no longer save automatically — that was a per-call latency cost
+    and the dominant disk-write driver. Instead, call this when you want
+    the on-disk file in sync with what's in Visio, or let `close_document`
+    save on close.
+
+    Args:
+        file_path: Path to the Visio file. Must already be open.
+
+    Returns:
+        {"path": str}
+    """
+    handle = ensure_document_open(file_path)
+    handle.save()
+    return {"path": file_path}
