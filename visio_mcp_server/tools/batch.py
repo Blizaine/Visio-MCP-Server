@@ -64,8 +64,18 @@ def _draw_shape(page, shape_type: str, x: float, y: float,
 @mcp.tool()
 @envelope("add_shapes")
 async def add_shapes(file_path: str, shapes: list, page_name: Optional[str] = None) -> dict:
-    """Add many shapes in a single batch. Strongly preferred over multiple
-    `add_shape` calls — typically 5-20x faster end-to-end.
+    """Add many GENERIC GEOMETRIC shapes (rectangles/circles/lines) in a
+    single batch.
+
+    For diagrams that include manufacturer-specific equipment (Crestron,
+    Cisco, Extron, etc.) — i.e. anything resembling a real AV system
+    drawing — use `drop_masters` instead. That tool places real stencil
+    masters with proper geometry and shape data. `add_shapes` only draws
+    abstract primitives.
+
+    `add_shapes` is still the right call for generic boxes (e.g., zone
+    labels, placeholders, sketches, anything where the shape itself is
+    decorative).
 
     Each entry in `shapes` is a dict:
         {
@@ -75,7 +85,7 @@ async def add_shapes(file_path: str, shapes: list, page_name: Optional[str] = No
           "text": str                          # optional, sets shape.Text
         }
 
-    Creates the file if it doesn't exist (same as `add_shape`).
+    Creates the file if it doesn't exist.
     Does not auto-save; call `save_document` or `close_document`.
 
     Args:

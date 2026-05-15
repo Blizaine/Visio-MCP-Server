@@ -29,12 +29,22 @@ from ..server_instance import mcp
 async def add_shape(file_path: str, shape_type: str, x: float, y: float,
                     width: Optional[float] = 1.0, height: Optional[float] = 1.0,
                     page_name: Optional[str] = None) -> dict:
-    """Add a single shape to a Visio document. Creates the file if it doesn't exist.
+    """Add a single GENERIC GEOMETRIC shape (rectangle/circle/line) to a Visio
+    document. Creates the file if it doesn't exist.
 
-    Prefer `add_shapes` (plural) when adding more than one shape — it's
-    substantially faster because it makes one model round-trip instead of N
-    and disables screen redraw during the batch.
+    For real Visio diagrams — AV system design, network topology, org
+    charts, anything with manufacturer-specific equipment — use
+    `drop_master` (single) or `drop_masters` (batch) instead. Those place
+    actual stencil shapes (e.g., a Crestron DM-NVX-360 from the Crestron
+    stencil) with the right geometry, connection points, and shape data.
+    `add_shape` only draws abstract primitives.
 
+    When `drop_master(s)` is the right call: use `find_masters` first to
+    pick the stencil and master name. When this tool is the right call:
+    you genuinely want a generic box or oval (e.g., a label background,
+    a placeholder, or a quick sketch).
+
+    Prefer `add_shapes` (plural) when adding more than one primitive shape.
     Does not auto-save; call `save_document` or `close_document`.
 
     Args:

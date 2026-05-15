@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 8 — drop master shapes, v3.2.0)
+The payoff for Phase 7. Once the stencil index knows what masters exist,
+this phase actually places them onto pages. `add_shape(s)` draws generic
+primitives; `drop_master(s)` drops real stencil shapes (Crestron NVX
+codecs, Cisco mics, Extron switchers, etc.) with their built-in
+geometry, connection points, and shape data fields.
+
+- `drop_master(file_path, stencil, master, x, y, page_name?, width?,
+  height?, text?, data?)` — single drop. Optional inline property writes
+  via `data: {prop_name: value, ...}` write to ShapeSheet `Prop.<name>`
+  cells inherited from the master. Unknown property names skip silently
+  (Phase 9 will add proper discovery and validation).
+- `drop_masters(file_path, items=[...], page_name?)` — batch drop.
+  Strongly preferred when placing more than one master. Pre-opens every
+  distinct stencil before any drops so typos fail fast, disables Visio's
+  screen redraw, wraps in one undo scope.
+
+- `visio_mcp_server/com/stencils.py` gains `get_or_open_stencil()` and
+  `close_all_stencils()`. A per-process cache of opened stencil
+  Documents (hidden + read-only) so subsequent drops from the same
+  stencil cost ~50ms each instead of ~500ms (each cold open). Cleanup is
+  hooked into the existing `close_visio_app` atexit handler.
+
+### Changed (Phase 8)
+- `add_shape` and `add_shapes` docstrings now explicitly steer the model
+  toward `drop_master`/`drop_masters` when the diagram involves
+  manufacturer-specific equipment. Generic primitives remain valid for
+  abstract sketches, labels, and zone backgrounds.
+- Package version 3.1.0 → 3.2.0 (additive; no breaking changes).
+
+### Performance (Phase 8 baseline)
+3 Cisco masters dropped (`CS-CODEC-EQ-NRK9++`, `CS-CODEC-EQ-RCK`,
+`CS-MIC-TABLE-J=`) in a single `drop_masters` call: **0.30s** COM-side.
+A typical AV diagram (15-30 devices) should drop in well under 1s of
+Visio work.
+
 ### Added (Phase 7 — stencil indexing and search, v3.1.0)
 Foundation for "real" Visio diagrams. The existing `add_shape(s)` calls
 draw generic geometric primitives; this phase lets the model discover and

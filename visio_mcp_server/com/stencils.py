@@ -460,6 +460,64 @@ def _score_master(query: str, master_name: str, manufacturer: str, prompt: str) 
     return base
 
 
+# ---------------------------------------------------------- runtime cache
+
+# Cache of open stencil documents, keyed by absolute path. Opened lazily on
+# the first drop from a given stencil and reused for the lifetime of the
+# server process. Opening a stencil is ~0.5s; reuse matters when an AV
+# diagram drops a dozen masters in a single batch.
+_open_stencil_docs: dict = {}
+
+
+def get_or_open_stencil(name_or_path: str):
+    """Return a live COM Document for the named stencil, opening it hidden
+    + read-only if it isn't already cached.
+
+    Looks the stencil up by short name (filename without extension) or full
+    absolute path. Returns the same Document object on repeated calls.
+    Raises ComError on COM failure, ValueError if the stencil isn't in the
+    index — callers should let those propagate up to the envelope.
+    """
+    entry = get_stencil(name_or_path)
+    if entry is None:
+        raise ValueError(
+            f"Stencil {name_or_path!r} not in index. "
+            "Run `reindex_stencils` if you recently added it; "
+            "check `stencil_index_status` for configured paths."
+        )
+
+    cached = _open_stencil_docs.get(entry.path)
+    if cached is not None:
+        try:
+            _ = cached.Name  # liveness probe
+            return cached
+        except Exception:
+            _open_stencil_docs.pop(entry.path, None)
+
+    app = get_visio_app()
+    flags = _VIS_OPEN_HIDDEN | _VIS_OPEN_RO
+    try:
+        doc = app.Documents.OpenEx(entry.path, flags)
+    except Exception as e:
+        raise ComError(f"Could not open stencil {entry.path}: {e}") from e
+    _open_stencil_docs[entry.path] = doc
+    logger.info("stencil opened hidden for drops: %s", entry.path)
+    return doc
+
+
+def close_all_stencils() -> None:
+    """Close every cached stencil. Called from `close_visio_app` at process
+    exit. Best-effort — COM cleanup during interpreter shutdown is flaky."""
+    for path, doc in list(_open_stencil_docs.items()):
+        try:
+            doc.Close()
+        except Exception:
+            pass
+    _open_stencil_docs.clear()
+
+
+# ------------------------------------------------------------------ search
+
 def find_masters(query: str, manufacturer: Optional[str] = None,
                  limit: int = 10) -> list[dict]:
     """Rank-search masters across the entire index."""

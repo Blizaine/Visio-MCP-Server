@@ -253,6 +253,23 @@ yellow, cyan, magenta, gray, orange, purple, pink, brown, black, white).
 - **`export_page`** — `{"file_path", "output_path", "page_name"?}`. Single-page export; format inferred from the `output_path` extension (.png, .jpg, .jpeg, .gif, .bmp, .tif, .tiff, .svg, .emf, .wmf).
 - **`export_pdf`** — `{"file_path", "output_path", "page_range"?}`. Multi-page PDF. `page_range` accepts `null`/`"all"` (default), `"current"`, `"N"` (single page, 1-based), or `"N-M"` (inclusive range).
 
+### Drop Master Tools
+
+The bridge from the stencil index to actual diagrams. Use these instead of
+`add_shape`/`add_shapes` whenever the diagram needs real manufacturer
+shapes (any AV system design, network topology, etc.).
+
+- **`drop_master`** — `{"file_path", "stencil", "master", "x", "y", "page_name"?, "width"?, "height"?, "text"?, "data"?}`. Drops one master at `(x, y)` in inches. `data` is `{prop_name: value, ...}` and writes to ShapeSheet `Prop.<name>` cells inherited from the master.
+- **`drop_masters`** — `{"file_path", "items": [...], "page_name"?}`. Each item: `{stencil, master, x, y, width?, height?, text?, data?}`. Preferred for more than one drop. Pre-opens every distinct stencil before any drops so a bad stencil/master name fails the whole batch fast.
+
+Typical AV flow:
+```text
+find_masters("Crestron NVX")              → pick stencil + master name
+drop_masters(items=[{stencil, master, x, y, text: "ENC-01"}, ...])
+connect_shapes_bulk(connections=[...])    → tie them together
+save_document
+```
+
 ### Stencil Tools
 
 These find master shapes in your stencil library so future drop calls

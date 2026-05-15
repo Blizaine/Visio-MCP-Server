@@ -89,11 +89,12 @@ async def run() -> None:
             expected = {"add_page", "add_shape", "add_shapes", "add_text",
                         "close_document", "connect_shapes", "connect_shapes_bulk",
                         "create_visio_file", "delete_page", "delete_shapes",
-                        "duplicate_page", "export_page", "export_pdf",
-                        "find_masters", "list_masters", "list_pages",
-                        "list_shapes", "list_stencils", "open_visio_file",
-                        "reindex_stencils", "save_document", "set_active_page",
-                        "set_shape_fill", "set_shape_line", "set_shape_text_format",
+                        "drop_master", "drop_masters", "duplicate_page",
+                        "export_page", "export_pdf", "find_masters",
+                        "list_masters", "list_pages", "list_shapes",
+                        "list_stencils", "open_visio_file", "reindex_stencils",
+                        "save_document", "set_active_page", "set_shape_fill",
+                        "set_shape_line", "set_shape_text_format",
                         "stencil_index_status", "style_shapes", "transform_shapes"}
             missing = expected - set(tool_names)
             if missing:
@@ -386,6 +387,67 @@ async def run() -> None:
                         )
                     print(f">>> find_masters({probe!r}) -> top hit: {top['master_name']!r} "
                           f"in {top['stencil']!r} (score={top['score']})")
+
+                    # -----------------------------------------------------------
+                    # Phase 8 coverage: drop the masters we just searched for
+                    # onto a fresh document. Verifies that a typical AV flow
+                    # (find -> drop -> save) works end-to-end.
+                    # -----------------------------------------------------------
+                    drop_path = os.path.join(
+                        os.path.dirname(test_path),
+                        f"visio_mcp_drops_{int(time.time())}.vsdx",
+                    )
+                    await _expect_ok(session, "create_visio_file", {"save_path": drop_path})
+
+                    # Drop a few masters from the same stencil, spaced out.
+                    drop_items = []
+                    for i, m in enumerate(masters["masters"][:3]):
+                        drop_items.append({
+                            "stencil": target["name"],
+                            "master": m["name"],
+                            "x": 1.0 + i * 2.5,
+                            "y": 5.0,
+                            "text": m["name"],   # label each drop with the master name
+                        })
+
+                    t0 = time.perf_counter()
+                    drop_data = await _expect_ok(session, "drop_masters", {
+                        "file_path": drop_path, "items": drop_items,
+                    })
+                    drop_elapsed = time.perf_counter() - t0
+                    if drop_data["count"] != len(drop_items):
+                        raise SystemExit(
+                            f"FAIL: drop_masters returned {drop_data['count']} shapes, "
+                            f"expected {len(drop_items)}"
+                        )
+                    print(f">>> Dropped {drop_data['count']} masters from {target['name']!r} "
+                          f"in {drop_elapsed:.2f}s")
+
+                    # Verify shapes really landed on the page.
+                    shapes_after = await _expect_ok(session, "list_shapes", {"file_path": drop_path})
+                    page_shape_count = len(shapes_after["shapes"])
+                    if page_shape_count < len(drop_items):
+                        raise SystemExit(
+                            f"FAIL: list_shapes reports {page_shape_count} on page, expected >={len(drop_items)}"
+                        )
+
+                    # Test the single-drop tool too.
+                    single = await _expect_ok(session, "drop_master", {
+                        "file_path": drop_path,
+                        "stencil": target["name"],
+                        "master": masters["masters"][0]["name"],
+                        "x": 1.0,
+                        "y": 1.0,
+                        "text": "single-drop test",
+                    })
+                    if not isinstance(single["shape_id"], int) or single["shape_id"] <= 0:
+                        raise SystemExit(f"FAIL: drop_master returned bad shape_id: {single}")
+
+                    await _expect_ok(session, "save_document", {"file_path": drop_path})
+                    await _expect_ok(session, "close_document", {
+                        "file_path": drop_path, "save_changes": True,
+                    })
+                    print(f">>> Drop test file: {drop_path}")
             else:
                 print(f"\n!!! Skipping stencil index coverage: {_STENCIL_TEST_DIR} does not exist")
 

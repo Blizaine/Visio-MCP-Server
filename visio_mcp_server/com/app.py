@@ -79,10 +79,12 @@ def close_visio_app() -> None:
     """
     global _visio_app
 
-    # Late import to avoid a circular dependency at module load time.
+    # Late imports to avoid circular dependencies at module load time.
     from .document import close_all_documents
+    from .stencils import close_all_stencils
 
     close_all_documents()
+    close_all_stencils()
 
     if _visio_app is not None:
         try:
