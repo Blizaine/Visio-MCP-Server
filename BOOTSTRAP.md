@@ -170,6 +170,48 @@ uv pip install -e .
 
 Then point your MCP client at `<repo>\.venv\Scripts\python.exe -m visio_mcp_server.visio_server`.
 
+## Updating the server (important read before re-installing)
+
+Always do this in order:
+
+1. **Fully exit Claude.** Close every window. Confirm in Task Manager
+   (or `Get-Process claude`) that *no* `claude.exe` process is left.
+   The unified Microsoft Store app sometimes keeps a tray/relauncher
+   process alive.
+2. **Uninstall first**, then install. Don't use `uv tool install --force`:
+   ```powershell
+   uv tool uninstall office-visio-mcp-server
+   uv tool install --python 3.12 "<INSTALL_SOURCE>"
+   ```
+3. **Restart Claude.** A fresh session picks up the new tool surface.
+
+**Why this matters:** The Claude Microsoft Store app sandboxes parts of
+`%APPDATA%`. While the app is running, `%APPDATA%\uv\tools\` is virtualized
+into the Store package's local cache and the launcher .exe is held open
+through that layer. If you `uv tool install --force` while Claude is
+running, the install partially fails: some files get replaced, some don't,
+and the venv ends up with files hardlinked into the Store package cache.
+The next Claude restart sees a launcher that points at a half-broken venv
+and crashes with `ModuleNotFoundError: No module named 'visio_mcp_server'`.
+
+**Recovering from a broken install (`ModuleNotFoundError`)**:
+
+```powershell
+# 1. Fully exit Claude (Task Manager check).
+# 2. Walk the tool dir and delete its files one at a time. (Recursive
+#    Remove-Item trips on the reparse-point safety; this works around it.)
+$toolDir = "$env:APPDATA\uv\tools\office-visio-mcp-server"
+Get-ChildItem $toolDir -Recurse -Force -File -ErrorAction SilentlyContinue |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
+Get-ChildItem $toolDir -Directory -ErrorAction SilentlyContinue |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+Remove-Item -LiteralPath $toolDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$env:USERPROFILE\.local\bin\visio_mcp_server.exe" -Force -ErrorAction SilentlyContinue
+# 3. Fresh install.
+uv tool install --python 3.12 "<INSTALL_SOURCE>"
+# 4. Reopen Claude.
+```
+
 ## Troubleshooting
 
 **`uv` command not found after install.**

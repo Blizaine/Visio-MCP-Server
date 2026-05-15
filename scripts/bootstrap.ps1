@@ -131,11 +131,23 @@ Write-Ok "Python 3.12 available to uv"
 Write-Step 4 "Visio MCP Server"
 
 Write-Host "    Source: $Source"
-# Re-install over an existing install if present, to allow upgrades.
-& uv tool install --force --python 3.12 $Source
+# If a previous install is present, uninstall first. We deliberately avoid
+# `--force` because, when the launcher .exe is held open by a running
+# Claude Store app, `--force` produces a partial install with files
+# hardlinked into the app's package cache. See BOOTSTRAP.md > "Updating
+# the server" for the gory details.
+& uv tool list 2>$null | Select-String -Pattern "^office-visio-mcp-server " | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "    Removing existing install first..."
+    & uv tool uninstall office-visio-mcp-server 2>$null | Out-Null
+}
+& uv tool install --python 3.12 $Source
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "uv tool install failed."
     Write-Host  "       Double-check the -Source value. See BOOTSTRAP.md > 'Install sources'."
+    Write-Host  "       If you saw a 'reparse point' or 'access denied' error, fully exit"
+    Write-Host  "       Claude (verify in Task Manager) and try again. See BOOTSTRAP.md >"
+    Write-Host  "       'Recovering from a broken install'."
     exit 1
 }
 
