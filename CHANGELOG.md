@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 7 — stencil indexing and search, v3.1.0)
+Foundation for "real" Visio diagrams. The existing `add_shape(s)` calls
+draw generic geometric primitives; this phase lets the model discover and
+reference manufacturer stencils (Crestron, Cisco, Extron, etc.) so the
+next phase (drop_master) can produce diagrams that look like actual AV
+system drawings instead of boxes-and-arrows abstractions.
+
+- `visio_mcp_server/com/stencils.py` — `StencilIndex` foundation:
+  - Path discovery: env var `CTI_VISIO_STENCIL_PATHS` (semicolon-separated),
+    plus Visio's `Application.StencilPaths`, plus
+    `%USERPROFILE%\Documents\My Shapes`. Dedupes; only existing dirs make
+    the final list.
+  - Walks `.vss`/`.vssx`/`.vssm` files and indexes each by opening it
+    hidden + read-only + no-workspace, harvesting masters
+    (`name`, `base_id`, `prompt`, `prop_names`).
+  - **Macro safety**: sets `Application.AutomationSecurity = 3`
+    (`msoAutomationSecurityForceDisable`) before opening any stencil so
+    VBA macros in `.vssm` files never run during the index pass; restores
+    the prior value when done.
+  - On-disk cache at `%USERPROFILE%\.cti-visio-mcp\stencil_index.json`.
+    Per-file mtime invalidation — unchanged stencils are reused on
+    subsequent rebuilds, only modified files reopen in Visio.
+  - Manufacturer extracted from filename stem (e.g. `Crestron NVX.vssx`
+    -> `Crestron`).
+- `visio_mcp_server/tools/stencils.py` — 5 new tools:
+  - `list_stencils(manufacturer?, limit?, offset?)` — paginated listing.
+  - `list_masters(stencil, query?, limit?)` — masters in one stencil.
+  - `find_masters(query, manufacturer?, limit=10)` — rank-search across
+    every indexed master. Ranking: exact match > substring (earlier =
+    better) > token overlap on name+manufacturer+prompt > fuzzy
+    similarity. Tuned for "Crestron DM-NVX-360"-style queries.
+  - `stencil_index_status()` — paths scanned, counts, in-progress state,
+    per-file errors. Use this when `find_masters` returns nothing.
+  - `reindex_stencils(force?)` — admin/maintenance.
+
+### Changed (Phase 7)
+- Package version 3.0.0 → 3.1.0 (additive; no breaking changes).
+- `scripts/bootstrap.ps1` now actively refuses to run if `claude.exe`
+  processes are detected, with a clear error pointing at File > Exit and
+  Task Manager. This prevents the half-broken-install state we hit on
+  the first colleague update attempt — root cause was the MS Store
+  app's package virtualization locking the launcher .exe during install.
+- `scripts/smoke_test.py` extended with stencil-index coverage. Indexes
+  the configured test directory (`CTI_VISIO_STENCIL_PATHS` defaults to
+  `C:\Users\blaine.brown\Documents\AI Testing\VisioMCP\Visio_Stencils`
+  in the smoke test), validates counts, picks the first master out of
+  the first non-empty stencil, and verifies it ranks itself first in a
+  `find_masters` call.
+
+### Performance (Phase 7 baseline)
+Indexing 15 stencils with 634 masters (Cisco, Crestron, Crown, Extron,
+JBL, LG, Logitech, NEAT, Planar, QSC, SAMSUNG, Shure, SONY, Wattbox,
+Favorites): **14.3 seconds** cold. Extrapolating to a ~200-stencil
+library: roughly 3 minutes for first index, ~milliseconds for cache hits
+on subsequent server starts.
+
 ### Changed — BREAKING (Phase 6 — rename and first release)
 - **Package renamed**: `office-visio-mcp-server` → `cti-visio-mcp-server`.
   The upstream PyPI name is owned by the original author (who has

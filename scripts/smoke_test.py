@@ -22,16 +22,27 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
+_STENCIL_TEST_DIR = r"C:\Users\blaine.brown\Documents\AI Testing\VisioMCP\Visio_Stencils"
+
+
 def _server_params() -> StdioServerParameters:
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     venv_python = os.path.join(repo_root, ".venv", "Scripts", "python.exe")
     if not os.path.exists(venv_python):
         venv_python = sys.executable  # fall back to current interpreter
+
+    # Pass through any env we want the server to see. Right now we pin the
+    # stencil-paths env var to the test directory so Phase 7 coverage is
+    # deterministic; everything else inherits via env=None defaults later
+    # if needed.
+    env = dict(os.environ)
+    env["CTI_VISIO_STENCIL_PATHS"] = _STENCIL_TEST_DIR
+
     return StdioServerParameters(
         command=venv_python,
         args=["-m", "visio_mcp_server.visio_server"],
         cwd=repo_root,
-        env=None,
+        env=env,
     )
 
 
@@ -79,10 +90,11 @@ async def run() -> None:
                         "close_document", "connect_shapes", "connect_shapes_bulk",
                         "create_visio_file", "delete_page", "delete_shapes",
                         "duplicate_page", "export_page", "export_pdf",
-                        "list_pages", "list_shapes", "open_visio_file",
-                        "save_document", "set_active_page", "set_shape_fill",
-                        "set_shape_line", "set_shape_text_format",
-                        "style_shapes", "transform_shapes"}
+                        "find_masters", "list_masters", "list_pages",
+                        "list_shapes", "list_stencils", "open_visio_file",
+                        "reindex_stencils", "save_document", "set_active_page",
+                        "set_shape_fill", "set_shape_line", "set_shape_text_format",
+                        "stencil_index_status", "style_shapes", "transform_shapes"}
             missing = expected - set(tool_names)
             if missing:
                 raise SystemExit(f"FAIL: tools missing from server: {missing}")
@@ -314,6 +326,68 @@ async def run() -> None:
             await _expect_ok(session, "close_document", {
                 "file_path": test_path, "save_changes": True,
             })
+
+            # ---------------------------------------------------------------
+            # Phase 7 coverage: stencil index. We rebuild from scratch
+            # against the test directory pinned via CTI_VISIO_STENCIL_PATHS
+            # (see _server_params). With 14 stencils this should complete
+            # in well under a minute.
+            # ---------------------------------------------------------------
+            if os.path.isdir(_STENCIL_TEST_DIR):
+                t0 = time.perf_counter()
+                data = await _expect_ok(session, "reindex_stencils", {"force": True})
+                idx_elapsed = time.perf_counter() - t0
+                stencil_count = data["stencil_count"]
+                master_count = data["master_count"]
+                print(f"\n>>> Indexed {stencil_count} stencils with {master_count} masters in {idx_elapsed:.1f}s")
+                if stencil_count == 0:
+                    raise SystemExit(
+                        f"FAIL: reindex_stencils found 0 stencils under {_STENCIL_TEST_DIR}"
+                    )
+
+                status = await _expect_ok(session, "stencil_index_status", {})
+                if status["stencil_count"] != stencil_count:
+                    raise SystemExit(
+                        f"FAIL: index_status reports {status['stencil_count']} but reindex reported {stencil_count}"
+                    )
+
+                data = await _expect_ok(session, "list_stencils", {"limit": 100})
+                if data["total"] != stencil_count:
+                    raise SystemExit(
+                        f"FAIL: list_stencils total ({data['total']}) != index stencil_count ({stencil_count})"
+                    )
+
+                # Pick the first stencil that actually has masters, then drill
+                # into it. Stencils with zero masters are valid (and
+                # appear in the index) but uninteresting for testing search.
+                target = next((s for s in data["stencils"] if s["master_count"] > 0), None)
+                if target is None:
+                    print(">>> All test stencils have 0 masters; skipping find_masters check")
+                else:
+                    masters = await _expect_ok(session, "list_masters", {
+                        "stencil": target["name"], "limit": 10,
+                    })
+                    print(f">>> {target['name']!r}: first {masters['returned']}/{masters['total']} masters")
+                    if masters["returned"] == 0:
+                        raise SystemExit(f"FAIL: list_masters returned 0 for {target['name']}")
+
+                    # Search for the first master's name. It must rank itself
+                    # first in the results.
+                    probe = masters["masters"][0]["name"]
+                    hits = await _expect_ok(session, "find_masters", {
+                        "query": probe, "limit": 5,
+                    })
+                    if hits["count"] == 0:
+                        raise SystemExit(f"FAIL: find_masters({probe!r}) returned no hits")
+                    top = hits["results"][0]
+                    if top["master_name"] != probe:
+                        raise SystemExit(
+                            f"FAIL: find_masters({probe!r}) ranked {top['master_name']!r} first instead of itself"
+                        )
+                    print(f">>> find_masters({probe!r}) -> top hit: {top['master_name']!r} "
+                          f"in {top['stencil']!r} (score={top['score']})")
+            else:
+                print(f"\n!!! Skipping stencil index coverage: {_STENCIL_TEST_DIR} does not exist")
 
     print(f"\nSUCCESS - all tools exercised. Outputs:")
     print(f"  .vsdx (singles):    {test_path}")

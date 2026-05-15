@@ -64,6 +64,19 @@ if ($PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT") {
 }
 Write-Ok  "Windows host detected"
 
+# Claude must be fully closed. Its Microsoft Store package keeps the
+# launcher .exe locked while the app is running, and `uv tool install`
+# (even with --force) produces a half-broken install in that state.
+# See BOOTSTRAP.md > "Updating the server".
+$claudeProcs = Get-Process claude -ErrorAction SilentlyContinue
+if ($claudeProcs) {
+    Write-Fail "Claude is currently running ($($claudeProcs.Count) process(es)). Close it fully before installing."
+    Write-Host  "       Quit from File > Exit (not just close the window). Then check Task Manager"
+    Write-Host  "       for any lingering claude.exe before retrying."
+    exit 1
+}
+Write-Ok  "No Claude processes detected"
+
 if (-not $SkipVisioCheck) {
     $visio = Get-Item "Registry::HKEY_CLASSES_ROOT\Visio.Application" -ErrorAction SilentlyContinue
     if (-not $visio) {

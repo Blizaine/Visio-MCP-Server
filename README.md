@@ -253,6 +253,28 @@ yellow, cyan, magenta, gray, orange, purple, pink, brown, black, white).
 - **`export_page`** — `{"file_path", "output_path", "page_name"?}`. Single-page export; format inferred from the `output_path` extension (.png, .jpg, .jpeg, .gif, .bmp, .tif, .tiff, .svg, .emf, .wmf).
 - **`export_pdf`** — `{"file_path", "output_path", "page_range"?}`. Multi-page PDF. `page_range` accepts `null`/`"all"` (default), `"current"`, `"N"` (single page, 1-based), or `"N-M"` (inclusive range).
 
+### Stencil Tools
+
+These find master shapes in your stencil library so future drop calls
+(Phase 8) can place them. The on-disk index is at
+`%USERPROFILE%\.cti-visio-mcp\stencil_index.json` and rebuilds incrementally
+based on file mtime.
+
+Configure stencil paths with the **`CTI_VISIO_STENCIL_PATHS`** environment
+variable (semicolon-separated). The server also picks up Visio's own
+`Application.StencilPaths` and `%USERPROFILE%\Documents\My Shapes` by
+default.
+
+- **`reindex_stencils`** — `{"force"?}`. Rebuild the on-disk index. First run can take minutes for a large library; subsequent runs are nearly instant for unchanged files. Use `force=true` to ignore mtime cache and rebuild every entry.
+- **`stencil_index_status`** — no args. Returns `{built_at, stencil_count, master_count, configured_paths, paths_scanned, cache_path, errors, ...}`. Diagnose empty-result searches with this.
+- **`list_stencils`** — `{"manufacturer"?, "limit"?, "offset"?}`. Manufacturer is a substring filter (derived from filename — e.g., `Crestron NVX.vssx` -> manufacturer `Crestron`).
+- **`list_masters`** — `{"stencil", "query"?, "limit"?}`. `stencil` accepts short name (filename without extension) or full path.
+- **`find_masters`** — `{"query", "manufacturer"?, "limit"?}`. Rank-search across the whole index. Ranking favors exact match > substring (earlier = better) > token overlap (name + manufacturer + prompt) > fuzzy similarity. Tuned for manufacturer-prefixed queries like `"Crestron DM-NVX-360"`.
+
+> **Macro safety**: `.vssm` (macro-enabled) stencils are opened with
+> `Application.AutomationSecurity` forced to disable so VBA code never
+> runs during indexing. The original setting is restored after.
+
 ### Batch Tools (preferred for >1 shape)
 
 Strongly preferred over looping the single-shape tools when you have
