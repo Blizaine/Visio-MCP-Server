@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..com.document import ensure_document_open
+from ..com.document import ensure_document_open, format_prop_value
 from ..com.stencils import get_or_open_stencil
 from ..com.undo import undo_scope
 from ..errors import InvalidArgument, envelope
@@ -32,33 +32,31 @@ from ..server_instance import mcp
 from .batch import _batch_context
 
 
-def _format_prop_value(value) -> Optional[str]:
-    """Format a Python value as a Visio ShapeSheet formula. None means skip."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, (int, float)):
-        return str(value)
-    s = str(value).replace('"', '""')   # Visio escapes embedded quotes by doubling
-    return f'"{s}"'
+def _apply_data(shape, data: dict, strict: bool = False) -> dict:
+    """Write `Prop.<name>` cells. Returns {name: applied_value} for what stuck.
 
-
-def _apply_data(shape, data: dict) -> dict:
-    """Write `Prop.<name>` cells. Returns {name: applied_value} for what stuck."""
+    When `strict=True`, raises `InvalidArgument` if any property doesn't
+    exist on the shape (with the list of missing names). Otherwise unknown
+    names are silently skipped — useful when dropping shapes whose master
+    may or may not have a given property.
+    """
     applied: dict = {}
+    missing: list = []
     for name, value in data.items():
-        formula = _format_prop_value(value)
+        formula = format_prop_value(value)
         if formula is None:
             continue
         try:
             shape.Cells(f"Prop.{name}").FormulaU = formula
         except Exception:
-            # Property doesn't exist on this master, or its name is malformed.
-            # Phase 9's set_shape_data will validate and report; here we
-            # silently skip so a partial drop still completes.
+            missing.append(name)
             continue
         applied[name] = value
+    if strict and missing:
+        raise InvalidArgument(
+            f"Properties not found on shape: {missing}",
+            details={"missing": missing, "applied": applied},
+        )
     return applied
 
 
@@ -119,6 +117,7 @@ async def drop_master(
     height: Optional[float] = None,
     text: Optional[str] = None,
     data: Optional[dict] = None,
+    strict_data: bool = False,
 ) -> dict:
     """Drop a single master shape from a stencil onto a page.
 
@@ -143,8 +142,13 @@ async def drop_master(
         text: Optional initial text label on the dropped shape.
         data: Optional dict of `{prop_name: value}` to write to
               `Prop.<name>` cells inherited from the master. Unknown
-              property names are silently skipped — use Phase 9 tools
-              for property discovery and validation.
+              property names are silently skipped unless `strict_data=True`.
+              For richer shape-data tools (discovery, search, validated
+              batch writes) see `get_shape_data` and `set_shapes_data`.
+        strict_data: If True, raise `INVALID_ARGUMENT` (and roll the drop
+                    back) when any name in `data` doesn't exist on the
+                    dropped shape. Default False (silent skip) for
+                    forgiving incremental drops.
 
     Returns:
         {"shape_id": int, "stencil": str, "master": str, "x": float,
@@ -164,7 +168,7 @@ async def drop_master(
 
     with undo_scope(f"Drop {master}"):
         shape = _drop_one(page, stencil_doc, spec, 0)
-        applied = _apply_data(shape, data) if data else {}
+        applied = _apply_data(shape, data, strict=strict_data) if data else {}
 
     return {
         "shape_id": int(shape.ID),
@@ -180,7 +184,8 @@ async def drop_master(
 @mcp.tool()
 @envelope("drop_masters")
 async def drop_masters(file_path: str, items: list,
-                       page_name: Optional[str] = None) -> dict:
+                       page_name: Optional[str] = None,
+                       strict_data: bool = False) -> dict:
     """Drop multiple master shapes onto a page in a single batch.
 
     Strongly preferred over multiple `drop_master` calls — typically
@@ -203,6 +208,10 @@ async def drop_masters(file_path: str, items: list,
         file_path: Path to the Visio file. Created if it doesn't exist.
         items: List of drop specs (see above).
         page_name: Target page. Defaults to the active page.
+        strict_data: If True, raise `INVALID_ARGUMENT` (and roll the
+                    whole batch back) if any item's `data` references a
+                    property that doesn't exist on the dropped shape.
+                    Default False — unknown property names skip silently.
 
     Returns:
         {"page_name": str, "count": int,
@@ -233,7 +242,10 @@ async def drop_masters(file_path: str, items: list,
         for i, spec in enumerate(items):
             stencil_doc = stencil_docs[spec["stencil"]]
             shape = _drop_one(page, stencil_doc, spec, i)
-            applied = _apply_data(shape, spec["data"]) if spec.get("data") else {}
+            applied = (
+                _apply_data(shape, spec["data"], strict=strict_data)
+                if spec.get("data") else {}
+            )
             results.append({
                 "shape_id": int(shape.ID),
                 "stencil": spec["stencil"],

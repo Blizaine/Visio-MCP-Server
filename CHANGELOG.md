@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 9 — shape data tools, v3.3.0)
+The third piece of the stencil story: read, write, and search the
+custom-property fields ("Prop.*" cells in the ShapeSheet) that turn a
+placed master from a decorative icon into an information-bearing
+diagram element. A Cisco mic master has fields like Manufacturer,
+DeviceName, SerialNumber — those are how a network/AV diagram becomes
+self-documenting.
+
+- `get_shape_data(file_path, shape_id, page_name?)` — full property
+  dump. Each property returns `{value, label, prompt, type, type_id,
+  formula}` so the caller knows both the user-visible label and the
+  underlying typed value. Number/Currency come back as floats, Boolean
+  as Python bool, strings/lists/dates as formatted display strings.
+- `set_shape_data(file_path, shape_id, data={prop: value, ...}, page_name?)`
+  — all-or-nothing write. If any property doesn't exist on the shape,
+  the call fails with `INVALID_ARGUMENT`, `error.details.missing` lists
+  the names, and the undo scope rolls back any partial writes that
+  landed first.
+- `set_shapes_data(file_path, updates=[{shape_id, data}, ...], page_name?)`
+  — batch version. Same all-or-nothing semantics across the whole batch.
+- `find_shapes_by_data(file_path, query={prop: value, ...}, page_name?, limit?)`
+  — AND-match search on the page. Strings are matched case-insensitively
+  as substrings; numbers/booleans are exact. "Find every device whose
+  Manufacturer contains 'Cisco'" is two property names away.
+
+### Changed (Phase 9)
+- `list_shapes` gains an optional `include_data: bool = False` parameter
+  — when True each shape's `data` is included in the response (same
+  shape as `get_shape_data`'s output). Default off to keep responses
+  small on big pages.
+- `drop_master` and `drop_masters` gain an optional `strict_data: bool =
+  False` parameter. Default behavior (silent skip on unknown property
+  names) is unchanged; `strict_data=True` routes through the same
+  validation as `set_shape_data` so a typo in the inline data dict
+  rolls the drop back instead of silently dropping the wrong-named
+  property.
+- Internal: `_format_prop_value` lifted out of `tools/drop.py` into
+  `com/document.py` as `format_prop_value` (public), and a new
+  `read_shape_data(shape)` helper centralizes ShapeSheet Prop-section
+  parsing. Both `drop.py`, `shape_data.py`, and the enhanced
+  `list_shapes` share one source of truth.
+- Package version 3.2.0 → 3.3.0 (additive; no breaking changes).
+
+### Verification
+Smoke test against the Cisco stencil: dropped 3 masters, scanned for
+one with custom properties (shape 42 had 9 fields), round-tripped
+`DeviceName` (`"MNT"` → `"SMOKETEST-..."` → read back matches),
+verified `find_shapes_by_data` located the modified shape, and verified
+strict mode rejects a bogus property name with `INVALID_ARGUMENT`.
+
 ### Added (Phase 8 — drop master shapes, v3.2.0)
 The payoff for Phase 7. Once the stencil index knows what masters exist,
 this phase actually places them onto pages. `add_shape(s)` draws generic

@@ -91,11 +91,14 @@ async def run() -> None:
                         "create_visio_file", "delete_page", "delete_shapes",
                         "drop_master", "drop_masters", "duplicate_page",
                         "export_page", "export_pdf", "find_masters",
+                        "find_shapes_by_data", "get_shape_data",
                         "list_masters", "list_pages", "list_shapes",
                         "list_stencils", "open_visio_file", "reindex_stencils",
-                        "save_document", "set_active_page", "set_shape_fill",
-                        "set_shape_line", "set_shape_text_format",
-                        "stencil_index_status", "style_shapes", "transform_shapes"}
+                        "save_document", "set_active_page", "set_shape_data",
+                        "set_shape_fill", "set_shape_line",
+                        "set_shape_text_format", "set_shapes_data",
+                        "stencil_index_status", "style_shapes",
+                        "transform_shapes"}
             missing = expected - set(tool_names)
             if missing:
                 raise SystemExit(f"FAIL: tools missing from server: {missing}")
@@ -442,6 +445,103 @@ async def run() -> None:
                     })
                     if not isinstance(single["shape_id"], int) or single["shape_id"] <= 0:
                         raise SystemExit(f"FAIL: drop_master returned bad shape_id: {single}")
+
+                    # -----------------------------------------------------------
+                    # Phase 9 coverage: shape data (custom properties).
+                    # Search every dropped shape for one with custom properties;
+                    # not every stencil master defines them.
+                    # -----------------------------------------------------------
+                    candidate_ids = [s["shape_id"] for s in drop_data["shapes"]]
+                    first_drop_id = candidate_ids[0]
+                    data_resp = None
+                    prop_count = 0
+                    for sid in candidate_ids:
+                        check = await _expect_ok(session, "get_shape_data", {
+                            "file_path": drop_path, "shape_id": sid,
+                        })
+                        if len(check["data"]) > 0:
+                            first_drop_id = sid
+                            data_resp = check
+                            prop_count = len(check["data"])
+                            break
+                    if data_resp is None:
+                        data_resp = await _expect_ok(session, "get_shape_data", {
+                            "file_path": drop_path, "shape_id": first_drop_id,
+                        })
+                    print(f">>> get_shape_data on shape {first_drop_id}: {prop_count} property field(s)")
+
+                    if prop_count > 0:
+                        # Pick the first writable property and round-trip it.
+                        first_prop_name = next(iter(data_resp["data"].keys()))
+                        original_props = data_resp["data"]
+                        original_value = original_props[first_prop_name]["value"]
+                        sentinel = f"SMOKETEST-{int(time.time())}"
+
+                        # Write
+                        write_resp = await _expect_ok(session, "set_shape_data", {
+                            "file_path": drop_path,
+                            "shape_id": first_drop_id,
+                            "data": {first_prop_name: sentinel},
+                        })
+                        if write_resp["applied"].get(first_prop_name) != sentinel:
+                            raise SystemExit(
+                                f"FAIL: set_shape_data didn't apply {first_prop_name}: {write_resp}"
+                            )
+
+                        # Read back
+                        after = await _expect_ok(session, "get_shape_data", {
+                            "file_path": drop_path, "shape_id": first_drop_id,
+                        })
+                        if after["data"][first_prop_name]["value"] != sentinel:
+                            raise SystemExit(
+                                f"FAIL: round-trip mismatch on {first_prop_name}: "
+                                f"got {after['data'][first_prop_name]['value']!r}, expected {sentinel!r}"
+                            )
+                        print(f">>> Round-tripped {first_prop_name!r}: {original_value!r} -> {sentinel!r}")
+
+                        # find_shapes_by_data should locate it.
+                        search = await _expect_ok(session, "find_shapes_by_data", {
+                            "file_path": drop_path,
+                            "query": {first_prop_name: sentinel},
+                        })
+                        if search["count"] < 1 or not any(s["shape_id"] == first_drop_id for s in search["shapes"]):
+                            raise SystemExit(
+                                f"FAIL: find_shapes_by_data didn't find shape {first_drop_id}: {search}"
+                            )
+                        print(f">>> find_shapes_by_data({first_prop_name}={sentinel!r}) "
+                              f"found {search['count']} shape(s)")
+
+                        # Strict-mode failure: bogus property name should
+                        # produce ok=false with INVALID_ARGUMENT.
+                        bogus_result = await session.call_tool("set_shape_data", {
+                            "file_path": drop_path,
+                            "shape_id": first_drop_id,
+                            "data": {"NoSuchPropertyXyz123": "value"},
+                        })
+                        bogus_ok, bogus_env = _envelope_ok(bogus_result)
+                        if bogus_ok:
+                            raise SystemExit(
+                                "FAIL: set_shape_data with bogus property should have failed"
+                            )
+                        if bogus_env["error"]["code"] != "INVALID_ARGUMENT":
+                            raise SystemExit(
+                                f"FAIL: bogus prop write returned wrong error code: {bogus_env}"
+                            )
+                        print(f">>> set_shape_data correctly rejected bogus property "
+                              f"({bogus_env['error']['code']})")
+                    else:
+                        print(">>> Master has no custom properties; skipping set/find round-trip")
+
+                    # list_shapes with include_data should bundle properties.
+                    with_data = await _expect_ok(session, "list_shapes", {
+                        "file_path": drop_path, "include_data": True,
+                    })
+                    if not with_data["shapes"]:
+                        raise SystemExit("FAIL: list_shapes(include_data=True) returned no shapes")
+                    if "data" not in with_data["shapes"][0]:
+                        raise SystemExit("FAIL: list_shapes(include_data=True) missing data field")
+                    print(f">>> list_shapes(include_data=True) returned data for "
+                          f"{len(with_data['shapes'])} shapes")
 
                     await _expect_ok(session, "save_document", {"file_path": drop_path})
                     await _expect_ok(session, "close_document", {

@@ -158,6 +158,127 @@ def forget_document(file_path: str) -> None:
     _open_documents.pop(key, None)
 
 
+# Visio ShapeSheet section IDs that show up across tools.
+# Reference: VisSectionIndices enum.
+VIS_SECTION_PROP = 243   # Custom Properties (Prop.* cells)
+
+# Custom-Property row column indexes (within section 243).
+_PROP_COL_VALUE = 0
+_PROP_COL_PROMPT = 1
+_PROP_COL_LABEL = 2
+_PROP_COL_FORMAT = 3
+_PROP_COL_SORTKEY = 4
+_PROP_COL_TYPE = 5
+_PROP_COL_INVIS = 6
+_PROP_COL_ASK = 7
+_PROP_COL_LANGID = 8
+_PROP_COL_CALENDAR = 9
+
+# VisCellVals enum for the Prop.Type cell (0 = String, 2 = Number, etc.)
+_PROP_TYPE_NAMES = {
+    0: "String",
+    1: "FixedList",
+    2: "Number",
+    3: "Boolean",
+    4: "VarList",
+    5: "Date",
+    6: "Duration",
+    7: "Currency",
+}
+
+
+def format_prop_value(value):
+    """Format a Python value as a Visio ShapeSheet formula. None means skip.
+
+    Used by every tool that writes to `Prop.<name>` cells. Strings are
+    quoted and embedded quotes are doubled (Visio's escape rule); numbers
+    are formatted bare; booleans become Visio's TRUE/FALSE keywords.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    s = str(value).replace('"', '""')
+    return f'"{s}"'
+
+
+def read_shape_data(shape) -> dict:
+    """Read every `Prop.<name>` row on `shape`.
+
+    Returns `{name: {"value", "label", "prompt", "type", "type_id",
+    "formula"}}`. Returns an empty dict for shapes with no custom
+    properties (most generic primitives).
+
+    Value typing matches the Visio type cell: Number/Currency are floats,
+    Boolean is a Python bool, everything else is the formatted display
+    string. The raw formula is also exposed for callers that need it.
+    """
+    out: dict = {}
+    try:
+        row_count = shape.RowCount(VIS_SECTION_PROP)
+    except Exception:
+        return out
+
+    for i in range(row_count):
+        try:
+            value_cell = shape.CellsSRC(VIS_SECTION_PROP, i, _PROP_COL_VALUE)
+            row_name = str(value_cell.RowName)
+        except Exception:
+            continue
+
+        entry: dict = {
+            "value": None,
+            "label": "",
+            "prompt": "",
+            "type": "String",
+            "type_id": 0,
+            "formula": "",
+        }
+
+        try:
+            entry["formula"] = str(value_cell.FormulaU)
+        except Exception:
+            pass
+
+        try:
+            type_id = int(shape.CellsSRC(VIS_SECTION_PROP, i, _PROP_COL_TYPE).ResultIU)
+            entry["type_id"] = type_id
+            entry["type"] = _PROP_TYPE_NAMES.get(type_id, f"Unknown({type_id})")
+        except Exception:
+            pass
+
+        try:
+            entry["label"] = str(shape.CellsSRC(VIS_SECTION_PROP, i, _PROP_COL_LABEL).ResultStr(""))
+        except Exception:
+            pass
+
+        try:
+            entry["prompt"] = str(shape.CellsSRC(VIS_SECTION_PROP, i, _PROP_COL_PROMPT).ResultStr(""))
+        except Exception:
+            pass
+
+        # Typed value.
+        try:
+            tid = entry["type_id"]
+            if tid in (2, 7):  # Number, Currency
+                entry["value"] = float(value_cell.Result(""))
+            elif tid == 3:    # Boolean
+                entry["value"] = bool(value_cell.Result(""))
+            else:             # String, lists, date, duration
+                entry["value"] = str(value_cell.ResultStr(""))
+        except Exception:
+            try:
+                entry["value"] = str(value_cell.ResultStr(""))
+            except Exception:
+                entry["value"] = None
+
+        out[row_name] = entry
+
+    return out
+
+
 def find_shape_on_page(page, shape_id: int):
     """Return the Shape on `page` with the given ID, or None if absent.
 

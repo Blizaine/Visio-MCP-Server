@@ -253,6 +253,21 @@ yellow, cyan, magenta, gray, orange, purple, pink, brown, black, white).
 - **`export_page`** — `{"file_path", "output_path", "page_name"?}`. Single-page export; format inferred from the `output_path` extension (.png, .jpg, .jpeg, .gif, .bmp, .tif, .tiff, .svg, .emf, .wmf).
 - **`export_pdf`** — `{"file_path", "output_path", "page_range"?}`. Multi-page PDF. `page_range` accepts `null`/`"all"` (default), `"current"`, `"N"` (single page, 1-based), or `"N-M"` (inclusive range).
 
+### Shape Data Tools (custom properties)
+
+Stencil masters often carry "shape data" — `Prop.*` ShapeSheet cells
+like `Manufacturer`, `Model`, `DeviceName`, `SerialNumber`. These tools
+read, write, and search those fields.
+
+- **`get_shape_data`** — `{"file_path", "shape_id", "page_name"?}`. Returns `{shape_id, page_name, data: {<prop>: {value, label, prompt, type, type_id, formula}}}`. Empty `data` means the shape has no custom properties (most generic primitives don't).
+- **`set_shape_data`** — `{"file_path", "shape_id", "data": {prop: value, ...}, "page_name"?}`. All-or-nothing. If any property name doesn't exist on the shape, the whole call aborts with `INVALID_ARGUMENT` and `error.details.missing` lists them; partial writes roll back via undo scope.
+- **`set_shapes_data`** — `{"file_path", "updates": [{"shape_id", "data"}, ...], "page_name"?}`. Batch version, same all-or-nothing semantics.
+- **`find_shapes_by_data`** — `{"file_path", "query": {prop: expected_value, ...}, "page_name"?, "limit"?}`. AND-semantics — every property in `query` must match. Strings match case-insensitively as substrings; numbers/booleans match exactly.
+
+`list_shapes` accepts an optional `"include_data": true` to include the
+full property dump for every shape in one call (off by default to keep
+responses small).
+
 ### Drop Master Tools
 
 The bridge from the stencil index to actual diagrams. Use these instead of

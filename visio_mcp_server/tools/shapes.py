@@ -18,7 +18,11 @@ from __future__ import annotations
 from typing import Optional
 
 from ..com.app import get_visio_app
-from ..com.document import ensure_document_open, find_shape_on_page
+from ..com.document import (
+    ensure_document_open,
+    find_shape_on_page,
+    read_shape_data,
+)
 from ..com.undo import undo_scope
 from ..errors import ShapeNotFound, envelope
 from ..server_instance import mcp
@@ -188,7 +192,8 @@ async def add_text(file_path: str, shape_id: int, text: str,
 
 @mcp.tool()
 @envelope("list_shapes")
-async def list_shapes(file_path: str, page_name: Optional[str] = None) -> dict:
+async def list_shapes(file_path: str, page_name: Optional[str] = None,
+                      include_data: bool = False) -> dict:
     """List all shapes on a page.
 
     Use this BEFORE making bulk modifications to an existing diagram. The
@@ -199,18 +204,23 @@ async def list_shapes(file_path: str, page_name: Optional[str] = None) -> dict:
     Args:
         file_path: Path to the Visio file.
         page_name: Name of the page to list. Defaults to the active page.
+        include_data: When True, each returned shape also has a `data`
+                     field with its full custom-property dump (same shape
+                     as `get_shape_data`). Off by default to keep
+                     responses small.
 
     Returns:
         {"page_name": str,
          "shapes": [{"id", "name", "text", "type",
-                     "position": {"x", "y"}, "size": {"width", "height"}}, ...]}
+                     "position": {"x", "y"}, "size": {"width", "height"},
+                     "data"?: {<prop>: {...}}}, ...]}
     """
     handle = ensure_document_open(file_path)
     page = handle.get_page(page_name)
 
     shapes_info = []
     for shape in page.Shapes:
-        shapes_info.append({
+        entry = {
             "id": int(shape.ID),
             "name": shape.Name,
             "text": shape.Text,
@@ -223,5 +233,8 @@ async def list_shapes(file_path: str, page_name: Optional[str] = None) -> dict:
                 "width": float(shape.Cells("Width").Result("in")),
                 "height": float(shape.Cells("Height").Result("in")),
             },
-        })
+        }
+        if include_data:
+            entry["data"] = read_shape_data(shape)
+        shapes_info.append(entry)
     return {"page_name": page.Name, "shapes": shapes_info}
