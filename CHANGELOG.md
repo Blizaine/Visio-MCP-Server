@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 12 — layers and groups, v3.6.0)
+AV system drawings routinely use both: separate "Audio Routing",
+"Video Routing", "Control" layers so engineers can toggle visibility
+during review; groups for racks / single-room subsystems so a whole
+subsystem moves and styles as a unit.
+
+Layers (`visio_mcp_server/tools/layers.py`):
+- `list_layers(file_path, page_name?)` — name, index, visibility,
+  print, active, locked, color formula for each layer on the page.
+- `add_layer(file_path, name, page_name?, visible?, printable?,
+  locked?, color?)` — name must be unique on the page.
+- `delete_layer(file_path, name, page_name?, delete_shapes?)` —
+  `delete_shapes=False` (default) keeps the shapes on the page; True
+  removes them too.
+- `set_layer_properties(file_path, name, page_name?, visible?,
+  printable?, locked?, color?)` — partial update; pass only what you
+  want to change.
+- `set_shapes_layers(file_path, assignments=[{shape_id, layers}], page_name?)`
+  — batch REPLACE semantics. The shape's layer membership is replaced
+  with exactly the listed layers (empty list removes the shape from
+  every layer). Pre-validates layer names; aborts the whole batch with
+  `INVALID_ARGUMENT` if any name is missing.
+
+Groups (`visio_mcp_server/tools/groups.py`):
+- `group_shapes(file_path, shape_ids, page_name?)` — needs at least
+  2 shape IDs; returns `{group_id, member_ids, member_count}`.
+  Existing tools (`transform_shapes`, `style_shapes`,
+  `delete_shapes`) operate on the group's ID since a group IS a shape.
+- `ungroup_shape(file_path, group_id, page_name?)` — breaks a group
+  back into its constituents. Returns just `{ungrouped_id}`; use
+  `list_shapes` to enumerate the page afterwards.
+
+### Tools learned along the way
+
+Two Visio-COM nuances that bit us during Phase 12 development:
+- **Layer cells via `Layer.CellsU(name)` aren't reliable across builds.**
+  Some Visio installations don't dispatch the named accessor on Layer
+  objects. We route through `Page.PageSheet.CellsSRC(visSectionLayer=5,
+  row=layer.Index-1, column=<int>)` instead, which always works.
+- **`Selection.Select(shape, visSelect)` uses VisActionCodes**, where
+  `visSelect = 1` (NOT 2 — that's `visSubSelect`). Using the wrong
+  value causes `Group()` to grab the entire connected component (any
+  shape reachable via gluing) instead of just the listed shapes.
+  Calling out the trap so it's not re-introduced.
+- **`Shape.AddLayer` / `Shape.RemoveLayer` don't dispatch in all
+  Visio builds.** We use `Layer.Add(shape, 0)` / `Layer.Remove(shape, 0)`
+  via the Layer object instead.
+
+### Changed (Phase 12)
+- Package version 3.5.0 → 3.6.0 (additive; no breaking changes).
+- Tool count 38 → 45.
+
+### Verification
+Smoke test extended: 3 layers (Video Routing red, Audio Routing
+orange, Network blue) added on the batch page, 6 shapes assigned
+across them (one shape on 2 layers), Network layer hidden via
+`set_layer_properties`, bogus layer name correctly rejected. 3 shapes
+grouped (group_id=14), ungrouped, original members verified back on
+page via `list_shapes`.
+
 ### Changed (Phase 11 — AV-grade connectors, v3.5.0)
 Signal-typing for AV diagrams: connectors now carry visual semantics.
 Yellow lines for audio, red for video, green for control, blue for

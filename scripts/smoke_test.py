@@ -86,21 +86,23 @@ async def run() -> None:
             tools = await session.list_tools()
             tool_names = sorted(t.name for t in tools.tools)
             print(f"Tools advertised: {tool_names}")
-            expected = {"add_page", "add_shape", "add_shapes", "add_text",
-                        "close_document", "connect_shapes", "connect_shapes_bulk",
-                        "create_visio_file", "delete_page", "delete_shapes",
+            expected = {"add_layer", "add_page", "add_shape", "add_shapes",
+                        "add_text", "close_document", "connect_shapes",
+                        "connect_shapes_bulk", "create_visio_file",
+                        "delete_layer", "delete_page", "delete_shapes",
                         "drop_master", "drop_masters", "duplicate_page",
                         "export_page", "export_pdf", "find_masters",
                         "find_shapes_by_data", "find_templates",
-                        "get_shape_data", "list_masters", "list_pages",
-                        "list_shapes", "list_stencils", "list_templates",
-                        "open_visio_file", "reindex_stencils",
-                        "reindex_templates", "save_document",
-                        "set_active_page", "set_shape_data", "set_shape_fill",
-                        "set_shape_line", "set_shape_text_format",
-                        "set_shapes_data", "stencil_index_status",
+                        "get_shape_data", "group_shapes", "list_layers",
+                        "list_masters", "list_pages", "list_shapes",
+                        "list_stencils", "list_templates", "open_visio_file",
+                        "reindex_stencils", "reindex_templates",
+                        "save_document", "set_active_page", "set_layer_properties",
+                        "set_shape_data", "set_shape_fill", "set_shape_line",
+                        "set_shape_text_format", "set_shapes_data",
+                        "set_shapes_layers", "stencil_index_status",
                         "style_shapes", "template_index_status",
-                        "transform_shapes"}
+                        "transform_shapes", "ungroup_shape"}
             missing = expected - set(tool_names)
             if missing:
                 raise SystemExit(f"FAIL: tools missing from server: {missing}")
@@ -324,6 +326,91 @@ async def run() -> None:
 
             elapsed = time.perf_counter() - t0
             print(f"\n>>> Batch build of 7 shapes + 6 connectors + 7 styles: {elapsed:.2f}s")
+
+            # ---------------------------------------------------------------
+            # Phase 12 coverage: layers.
+            # Create 3 signal-flow layers, assign shapes to them.
+            # ---------------------------------------------------------------
+            for layer_name, layer_color in (
+                ("Video Routing", "#FF0000"),
+                ("Audio Routing", "#FFAA00"),
+                ("Network", "#0066CC"),
+            ):
+                await _expect_ok(session, "add_layer", {
+                    "file_path": batch_path, "name": layer_name, "color": layer_color,
+                })
+            layers_data = await _expect_ok(session, "list_layers", {"file_path": batch_path})
+            layer_names = {l["name"] for l in layers_data["layers"]}
+            for expected in ("Video Routing", "Audio Routing", "Network"):
+                if expected not in layer_names:
+                    raise SystemExit(f"FAIL: layer {expected!r} not in list_layers output: {layer_names}")
+            print(f">>> Added 3 layers; page now has {layers_data['count']} layer(s)")
+
+            # Assign batch shapes onto the layers.
+            await _expect_ok(session, "set_shapes_layers", {
+                "file_path": batch_path,
+                "assignments": [
+                    {"shape_id": shape_ids[0], "layers": ["Video Routing", "Network"]},
+                    {"shape_id": shape_ids[1], "layers": ["Video Routing"]},
+                    {"shape_id": shape_ids[2], "layers": ["Video Routing"]},
+                    {"shape_id": shape_ids[3], "layers": ["Audio Routing"]},
+                    {"shape_id": shape_ids[4], "layers": ["Audio Routing"]},
+                    {"shape_id": shape_ids[5], "layers": ["Audio Routing"]},
+                ],
+            })
+            print(">>> Assigned 6 shapes across 3 layers (one shape on 2 layers)")
+
+            # Hide the Network layer to prove set_layer_properties works.
+            props_data = await _expect_ok(session, "set_layer_properties", {
+                "file_path": batch_path, "name": "Network", "visible": False,
+            })
+            if props_data["applied"].get("visible") is not False:
+                raise SystemExit(f"FAIL: set_layer_properties didn't apply visible=False: {props_data}")
+            print(">>> Hid Network layer (visibility toggle verified)")
+
+            # Bogus layer name should fail before any writes.
+            bogus = await session.call_tool("set_shapes_layers", {
+                "file_path": batch_path,
+                "assignments": [{"shape_id": shape_ids[0], "layers": ["NoSuchLayerXyz"]}],
+            })
+            bogus_ok, bogus_env = _envelope_ok(bogus)
+            if bogus_ok or bogus_env["error"]["code"] != "INVALID_ARGUMENT":
+                raise SystemExit(f"FAIL: set_shapes_layers should reject unknown layer name: {bogus_env}")
+            print(f">>> set_shapes_layers correctly rejected unknown layer ({bogus_env['error']['code']})")
+
+            # ---------------------------------------------------------------
+            # Phase 12 coverage: groups.
+            # Group shapes 4-5-6 (the "audio subsystem"), verify group_id,
+            # then ungroup and check member IDs match.
+            # ---------------------------------------------------------------
+            grp = await _expect_ok(session, "group_shapes", {
+                "file_path": batch_path,
+                "shape_ids": [shape_ids[3], shape_ids[4], shape_ids[5]],
+            })
+            group_id = grp["group_id"]
+            if grp["member_count"] != 3:
+                raise SystemExit(f"FAIL: group_shapes member_count {grp['member_count']} != 3")
+            print(f">>> Grouped 3 shapes into group_id={group_id}")
+
+            ungrp = await _expect_ok(session, "ungroup_shape", {
+                "file_path": batch_path, "group_id": group_id,
+            })
+            if ungrp["ungrouped_id"] != group_id:
+                raise SystemExit(
+                    f"FAIL: ungroup_shape returned ungrouped_id={ungrp['ungrouped_id']}, "
+                    f"expected {group_id}"
+                )
+            # Use list_shapes to verify the original members are now back
+            # on the page as top-level shapes.
+            after = await _expect_ok(session, "list_shapes", {"file_path": batch_path})
+            after_ids = {s["id"] for s in after["shapes"]}
+            for sid in (shape_ids[3], shape_ids[4], shape_ids[5]):
+                if sid not in after_ids:
+                    raise SystemExit(
+                        f"FAIL: original grouped shape {sid} not on page after ungroup. "
+                        f"After-set: {sorted(after_ids)}"
+                    )
+            print(f">>> Ungrouped {group_id}; original members visible on page again")
 
             # Explicit save (singles no longer auto-save).
             await _expect_ok(session, "save_document", {"file_path": batch_path})

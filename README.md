@@ -285,6 +285,28 @@ connect_shapes_bulk(connections=[...])    → tie them together
 save_document
 ```
 
+### Layer Tools
+
+AV drawings often segregate signal types onto separate layers — "Audio
+Routing", "Video Routing", "Control Wiring", "Network" — so engineers
+can toggle visibility while reviewing.
+
+- **`list_layers`** — `{"file_path", "page_name"?}`. Returns each layer's name, index, visibility, print, active, locked, and color formula.
+- **`add_layer`** — `{"file_path", "name", "page_name"?, "visible"?, "printable"?, "locked"?, "color"?}`. Color accepts `#RRGGBB`, `RGB(...)`, or a named color.
+- **`delete_layer`** — `{"file_path", "name", "page_name"?, "delete_shapes"?}`. `delete_shapes=True` removes member shapes too; default keeps them on the page.
+- **`set_layer_properties`** — `{"file_path", "name", "page_name"?, "visible"?, "printable"?, "locked"?, "color"?}`. Partial update; pass only what you want to change.
+- **`set_shapes_layers`** — `{"file_path", "assignments": [{"shape_id", "layers": [str, ...]}, ...], "page_name"?}`. REPLACE semantics — shape's membership becomes exactly the listed layers. Empty list = remove from every layer. Unknown layer name aborts the whole batch with `INVALID_ARGUMENT`.
+
+### Group Tools
+
+Combine shapes that should be treated as one unit (rack of devices,
+single-room subsystem). The group itself is a Shape with an ID, so the
+existing `transform_shapes`, `style_shapes`, `delete_shapes` already
+operate on it.
+
+- **`group_shapes`** — `{"file_path", "shape_ids": [int], "page_name"?}`. Needs ≥2 IDs.
+- **`ungroup_shape`** — `{"file_path", "group_id", "page_name"?}`. Returns `{ungrouped_id}`; call `list_shapes` to see what's on the page after.
+
 ### Template Tools
 
 Discover branded starter templates that `create_visio_file` can seed

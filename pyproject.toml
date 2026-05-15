@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cti-visio-mcp-server"
-version = "3.5.0"
+version = "3.6.0"
 description = "MCP server for AV system design diagrams in Microsoft Visio (forked and extended from office-visio-mcp-server)"
 readme = "README.md"
 license = {file = "LICENSE"}
