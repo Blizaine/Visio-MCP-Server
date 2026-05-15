@@ -9,5 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Generated MCP config (produced by setup_mcp.py; contains machine-specific paths)
+# Legacy generated MCP config (would contain machine-specific paths)
 mcp-config.json
+
+# Local stencil index cache (per-machine, rebuilds on demand)
+.cti-visio-mcp/

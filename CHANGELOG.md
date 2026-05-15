@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — BREAKING (Phase 6 — rename and first release)
+- **Package renamed**: `office-visio-mcp-server` → `cti-visio-mcp-server`.
+  The upstream PyPI name is owned by the original author (who has
+  archived their repo); the new name avoids that conflict and reflects
+  the CTI-specific direction this fork is going (AV system design,
+  company stencil/template libraries).
+- **Version bumped to 3.0.0.** The Python import path
+  (`visio_mcp_server`) and the launcher binary name (`visio_mcp_server.exe`)
+  are unchanged on purpose — existing MCP client configs that reference
+  the .exe path keep working.
+- LICENSE updated with a CTI/Blaine Brown copyright line for the fork's
+  substantial modifications. Stays MIT.
+- `setup_mcp.py` (legacy interactive installer carried over from
+  upstream) removed. `scripts/bootstrap.ps1` + `BOOTSTRAP.md` are now
+  the colleague-facing install path.
+
+### Added (Phase 6)
+- `CONTRIBUTING.md` — repo conventions, smoke-test workflow, PR checklist.
+- `.github/ISSUE_TEMPLATE/` — `bug_report.md` and `feature_request.md`
+  templates that capture the env info we'll need to triage real reports.
+- Pre-emptive `.gitignore` for `.cti-visio-mcp/` — the on-disk stencil-
+  index cache directory that Phase 7 will write to.
+
 ### Added (Phase 5 — batch tools and modify-existing CRUD)
 - `add_shapes(file_path, shapes=[...], page_name?)` — bulk shape creation.
   Each item: `{shape_type, x, y, width, height, text?}`.

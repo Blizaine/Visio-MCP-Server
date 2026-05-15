@@ -3,18 +3,26 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "office-visio-mcp-server"
-version = "2.3.0"
-description = "MCP server for manipulating Microsoft Visio documents"
+name = "cti-visio-mcp-server"
+version = "3.0.0"
+description = "MCP server for AV system design diagrams in Microsoft Visio (forked and extended from office-visio-mcp-server)"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "GongRzhe", email = "gongrzhe@gmail.com"}
+    {name = "Blaine Brown", email = "blaine.brown@cti.com"},
+]
+maintainers = [
+    {name = "Blaine Brown", email = "blaine.brown@cti.com"},
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: Microsoft :: Windows",
+    "Topic :: Multimedia :: Graphics :: Editors :: Vector-Based",
+    "Topic :: Office/Business",
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -23,11 +31,14 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/GongRzhe/Office-Visio-MCP-Server"
-"Bug Tracker" = "https://github.com/GongRzhe/Office-Visio-MCP-Server/issues"
+"Homepage" = "https://github.com/Blizaine/Visio-MCP-Server"
+"Bug Tracker" = "https://github.com/Blizaine/Visio-MCP-Server/issues"
+"Upstream Fork" = "https://github.com/GongRzhe/Office-Visio-MCP-Server"
 
 [tool.hatch.build]
 packages = ["visio_mcp_server"]
 
+# Launcher name stays `visio_mcp_server` (not the distribution name) so MCP
+# client configs that reference the .exe path don't break on rename.
 [project.scripts]
 visio_mcp_server = "visio_mcp_server.visio_server:main"

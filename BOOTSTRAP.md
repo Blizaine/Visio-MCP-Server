@@ -83,7 +83,7 @@ uv tool install "<INSTALL_SOURCE>"
 ```
 
 This isolates the server in its own venv under
-`%USERPROFILE%\.local\share\uv\tools\office-visio-mcp-server\` and exposes
+`%USERPROFILE%\.local\share\uv\tools\cti-visio-mcp-server\` and exposes
 the launcher at `%USERPROFILE%\.local\bin\visio_mcp_server.exe`. That
 directory is already on your PATH from step 1.
 
@@ -155,10 +155,10 @@ How you get the package depends on how your team is distributing it:
 | Source style | What `<INSTALL_SOURCE>` looks like |
 |---|---|
 | Private git repo (recommended for early sharing) | `git+https://github.com/<org>/<repo>.git` |
-| Public PyPI (when published) | `office-visio-mcp-server` |
-| Internal PyPI mirror | `office-visio-mcp-server` (with `UV_INDEX_URL` set to the mirror) |
+| Public PyPI (when published) | `cti-visio-mcp-server` |
+| Internal PyPI mirror | `cti-visio-mcp-server` (with `UV_INDEX_URL` set to the mirror) |
 | Local clone, editable | `.` (run inside the repo, after `uv venv`) |
-| Wheel file you've been emailed | `path\to\office_visio_mcp_server-2.0.0-py3-none-any.whl` |
+| Wheel file you've been emailed | `path\to\cti_visio_mcp_server-3.0.0-py3-none-any.whl` |
 
 If you have the source cloned and just want a dev install, the simpler
 flow is:
@@ -180,7 +180,7 @@ Always do this in order:
    process alive.
 2. **Uninstall first**, then install. Don't use `uv tool install --force`:
    ```powershell
-   uv tool uninstall office-visio-mcp-server
+   uv tool uninstall cti-visio-mcp-server
    uv tool install --python 3.12 "<INSTALL_SOURCE>"
    ```
 3. **Restart Claude.** A fresh session picks up the new tool surface.
@@ -200,7 +200,7 @@ and crashes with `ModuleNotFoundError: No module named 'visio_mcp_server'`.
 # 1. Fully exit Claude (Task Manager check).
 # 2. Walk the tool dir and delete its files one at a time. (Recursive
 #    Remove-Item trips on the reparse-point safety; this works around it.)
-$toolDir = "$env:APPDATA\uv\tools\office-visio-mcp-server"
+$toolDir = "$env:APPDATA\uv\tools\cti-visio-mcp-server"
 Get-ChildItem $toolDir -Recurse -Force -File -ErrorAction SilentlyContinue |
     ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 Get-ChildItem $toolDir -Directory -ErrorAction SilentlyContinue |
@@ -248,7 +248,7 @@ fixed in Phase 1 (`LinePattern="0"` removed from `connect_shapes`).
 ## Uninstall
 
 ```powershell
-uv tool uninstall office-visio-mcp-server
+uv tool uninstall cti-visio-mcp-server
 ```
 
 To remove uv and the managed Python:

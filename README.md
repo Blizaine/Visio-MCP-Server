@@ -119,7 +119,7 @@ If you have `uvx` installed, you can run the server directly from PyPI without l
     "visio-server": {
       "command": "uvx",
       "args": [
-        "--from", "office-visio-mcp-server", "visio_mcp_server"
+        "--from", "cti-visio-mcp-server", "visio_mcp_server"
       ]
     }
   }

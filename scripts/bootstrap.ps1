@@ -13,8 +13,8 @@
 .PARAMETER Source
     Where to install the Visio MCP Server from. Examples:
       - git+https://github.com/<org>/<repo>.git    (private/public git repo)
-      - office-visio-mcp-server                     (PyPI, if/when published)
-      - C:\path\to\office_visio_mcp_server-2.0.0-py3-none-any.whl   (wheel)
+      - cti-visio-mcp-server                     (PyPI, if/when published)
+      - C:\path\to\cti_visio_mcp_server-3.0.0-py3-none-any.whl   (wheel)
       - .                                           (local clone — run from repo root)
 
 .PARAMETER SkipVisioCheck
@@ -136,10 +136,10 @@ Write-Host "    Source: $Source"
 # Claude Store app, `--force` produces a partial install with files
 # hardlinked into the app's package cache. See BOOTSTRAP.md > "Updating
 # the server" for the gory details.
-& uv tool list 2>$null | Select-String -Pattern "^office-visio-mcp-server " | Out-Null
+& uv tool list 2>$null | Select-String -Pattern "^cti-visio-mcp-server " | Out-Null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "    Removing existing install first..."
-    & uv tool uninstall office-visio-mcp-server 2>$null | Out-Null
+    & uv tool uninstall cti-visio-mcp-server 2>$null | Out-Null
 }
 & uv tool install --python 3.12 $Source
 if ($LASTEXITCODE -ne 0) {
