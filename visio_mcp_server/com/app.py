@@ -42,10 +42,33 @@ def check_visio_installed() -> bool:
         return False
 
 
+def _is_app_alive(app) -> bool:
+    """Cheap probe to check whether a cached Visio.Application reference
+    still points at a live process. Reading `.Version` round-trips through
+    the COM proxy; if Visio has crashed or been closed manually, this
+    raises with `RPC server unavailable` (HRESULT 0x800706BA) or similar."""
+    try:
+        _ = app.Version
+        return True
+    except Exception:
+        return False
+
+
 def get_visio_app():
+    """Return the shared Visio.Application, launching it if necessary.
+
+    Caches the COM handle for the process lifetime, but liveness-probes
+    the cached one each call — a Visio crash or manual close used to
+    leave the server with a zombie reference that failed every
+    subsequent call with `RPC server unavailable`. Now we detect that
+    and re-acquire transparently.
+    """
     global _visio_app
     if _visio_app is not None:
-        return _visio_app
+        if _is_app_alive(_visio_app):
+            return _visio_app
+        logger.warning("cached Visio.Application is dead; re-acquiring")
+        _visio_app = None
 
     attempts = (
         ("Dispatch", win32com.client.Dispatch),

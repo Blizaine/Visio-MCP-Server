@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (v3.6.1)
+- `get_visio_app()` now liveness-probes its cached `Visio.Application`
+  reference before returning it. If Visio has crashed or been closed
+  manually between calls, the next tool call detects the dead handle
+  (via a cheap `.Version` read), drops the cache, and re-acquires
+  Visio transparently. Previously a Visio crash poisoned the cached
+  handle for the lifetime of the MCP server process and every
+  subsequent call returned `COM_ERROR: The RPC server is unavailable.`
+  Surfaced by a real user session after the smoke test harness killed
+  Visio mid-run.
+
 ### Added (Phase 12 — layers and groups, v3.6.0)
 AV system drawings routinely use both: separate "Audio Routing",
 "Video Routing", "Control" layers so engineers can toggle visibility
