@@ -12,5 +12,6 @@ from . import shapes  # noqa: F401
 from . import shape_data  # noqa: F401
 from . import stencils  # noqa: F401
 from . import styling  # noqa: F401
+from . import templates  # noqa: F401
 from . import batch  # noqa: F401
 from . import drop  # noqa: F401

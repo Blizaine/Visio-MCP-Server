@@ -23,6 +23,7 @@ from mcp.client.stdio import stdio_client
 
 
 _STENCIL_TEST_DIR = r"C:\Users\blaine.brown\Documents\AI Testing\VisioMCP\Visio_Stencils"
+_TEMPLATE_TEST_DIR = r"C:\Users\blaine.brown\Documents\AI Testing\VisioMCP\Visio_Template"
 
 
 def _server_params() -> StdioServerParameters:
@@ -31,12 +32,11 @@ def _server_params() -> StdioServerParameters:
     if not os.path.exists(venv_python):
         venv_python = sys.executable  # fall back to current interpreter
 
-    # Pass through any env we want the server to see. Right now we pin the
-    # stencil-paths env var to the test directory so Phase 7 coverage is
-    # deterministic; everything else inherits via env=None defaults later
-    # if needed.
+    # Pin the discovery env vars to the test directories so Phase 7
+    # (stencils) and Phase 10 (templates) coverage is deterministic.
     env = dict(os.environ)
     env["CTI_VISIO_STENCIL_PATHS"] = _STENCIL_TEST_DIR
+    env["CTI_VISIO_TEMPLATE_PATHS"] = _TEMPLATE_TEST_DIR
 
     return StdioServerParameters(
         command=venv_python,
@@ -91,13 +91,15 @@ async def run() -> None:
                         "create_visio_file", "delete_page", "delete_shapes",
                         "drop_master", "drop_masters", "duplicate_page",
                         "export_page", "export_pdf", "find_masters",
-                        "find_shapes_by_data", "get_shape_data",
-                        "list_masters", "list_pages", "list_shapes",
-                        "list_stencils", "open_visio_file", "reindex_stencils",
-                        "save_document", "set_active_page", "set_shape_data",
-                        "set_shape_fill", "set_shape_line",
-                        "set_shape_text_format", "set_shapes_data",
-                        "stencil_index_status", "style_shapes",
+                        "find_shapes_by_data", "find_templates",
+                        "get_shape_data", "list_masters", "list_pages",
+                        "list_shapes", "list_stencils", "list_templates",
+                        "open_visio_file", "reindex_stencils",
+                        "reindex_templates", "save_document",
+                        "set_active_page", "set_shape_data", "set_shape_fill",
+                        "set_shape_line", "set_shape_text_format",
+                        "set_shapes_data", "stencil_index_status",
+                        "style_shapes", "template_index_status",
                         "transform_shapes"}
             missing = expected - set(tool_names)
             if missing:
@@ -550,6 +552,62 @@ async def run() -> None:
                     print(f">>> Drop test file: {drop_path}")
             else:
                 print(f"\n!!! Skipping stencil index coverage: {_STENCIL_TEST_DIR} does not exist")
+
+            # ---------------------------------------------------------------
+            # Phase 10 coverage: template index + create_visio_file(template=).
+            # ---------------------------------------------------------------
+            if os.path.isdir(_TEMPLATE_TEST_DIR):
+                tpl_status = await _expect_ok(session, "reindex_templates", {"force": True})
+                if tpl_status["template_count"] == 0:
+                    raise SystemExit(
+                        f"FAIL: reindex_templates found 0 templates under {_TEMPLATE_TEST_DIR}"
+                    )
+                print(f"\n>>> Indexed {tpl_status['template_count']} template(s)")
+
+                listing = await _expect_ok(session, "list_templates", {"limit": 50})
+                if listing["total"] != tpl_status["template_count"]:
+                    raise SystemExit(
+                        f"FAIL: list_templates total ({listing['total']}) != index count"
+                    )
+                first = listing["templates"][0]
+                print(f">>> First template: {first['name']!r} ({first['format']})")
+
+                # find_templates: substring search on the first template's
+                # name's first word should rank it first.
+                first_word = first["name"].split()[0] if first["name"] else first["name"]
+                if first_word:
+                    found = await _expect_ok(session, "find_templates", {
+                        "query": first_word, "limit": 5,
+                    })
+                    if found["count"] == 0 or found["results"][0]["name"] != first["name"]:
+                        raise SystemExit(
+                            f"FAIL: find_templates({first_word!r}) didn't rank {first['name']!r} first: {found}"
+                        )
+                    print(f">>> find_templates({first_word!r}) ranked {first['name']!r} "
+                          f"first (score={found['results'][0]['score']})")
+
+                # create_visio_file(template="...") -> new doc seeded from it.
+                template_out = os.path.join(
+                    os.path.dirname(test_path),
+                    f"visio_mcp_template_{int(time.time())}.vsdx",
+                )
+                created = await _expect_ok(session, "create_visio_file", {
+                    "template": first["name"],
+                    "save_path": template_out,
+                })
+                if created.get("template_used") != first["name"]:
+                    raise SystemExit(
+                        f"FAIL: create_visio_file template_used={created.get('template_used')!r}, "
+                        f"expected {first['name']!r}"
+                    )
+                if not os.path.exists(template_out):
+                    raise SystemExit(f"FAIL: template-seeded file not created at {template_out}")
+                print(f">>> create_visio_file(template={first['name']!r}) -> {template_out}")
+                await _expect_ok(session, "close_document", {
+                    "file_path": template_out, "save_changes": True,
+                })
+            else:
+                print(f"\n!!! Skipping template coverage: {_TEMPLATE_TEST_DIR} does not exist")
 
     print(f"\nSUCCESS - all tools exercised. Outputs:")
     print(f"  .vsdx (singles):    {test_path}")

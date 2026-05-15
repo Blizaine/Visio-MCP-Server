@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 10 — template discovery, v3.4.0)
+Closes the third gap in the discovery story: stencils (Phase 7),
+masters (Phase 8), shape data (Phase 9), and now branded templates.
+AV diagrams typically start from a company-standard titleblock template;
+this phase makes that template addressable by name instead of by
+machine-specific absolute path.
+
+- `visio_mcp_server/com/templates.py` — file-system walker + on-disk
+  index. Unlike stencils (which need a real Visio open to enumerate
+  masters), templates only need file metadata, so the index is cheap —
+  sub-second on hundreds of files. Same cache pattern as stencils:
+  `%USERPROFILE%/.cti-visio-mcp/template_index.json` with per-file
+  mtime invalidation.
+  - Path discovery: env var `CTI_VISIO_TEMPLATE_PATHS` (semicolon-separated)
+    + Visio's `Application.TemplatePaths` + Windows defaults.
+  - Recognized extensions: `.vstx`, `.vst`, `.vstm`, `.vsdx`, `.vsd`, `.vsdm`.
+    Reality is that a `.vsdx` "starter file" is often used as a template
+    — `Documents.Add(path)` does the right thing for either format.
+  - Category = immediate parent directory name (for grouping by, e.g.,
+    `Signal Flow/`, `Org Chart/`).
+- `visio_mcp_server/tools/templates.py` — 4 new tools:
+  - `list_templates(category?, limit?, offset?)`
+  - `find_templates(query, limit?)` — exact > substring > fuzzy
+  - `template_index_status()`
+  - `reindex_templates(force?)`
+
+### Changed (Phase 10)
+- `create_visio_file` now accepts an optional `template: str` argument
+  that resolves a template name against the index. Mutually exclusive
+  with the existing `template_path`. Both omitted = blank document
+  (unchanged). Response gains `template_used: str|null` so callers can
+  confirm which template seeded the new file.
+- Package version 3.3.0 → 3.4.0 (additive; no breaking changes).
+- Tool count: 34 → 38.
+
+### Verification
+Smoke test pass against the test template directory:
+`CTI Visio Signal Flow Template.vsdx` indexed, found by
+`find_templates("CTI")` with score 800, and used as the seed for a new
+document via `create_visio_file(template=...)`.
+
 ### Added (Phase 9 — shape data tools, v3.3.0)
 The third piece of the stencil story: read, write, and search the
 custom-property fields ("Prop.*" cells in the ShapeSheet) that turn a

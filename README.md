@@ -285,6 +285,22 @@ connect_shapes_bulk(connections=[...])    → tie them together
 save_document
 ```
 
+### Template Tools
+
+Discover branded starter templates that `create_visio_file` can seed
+new documents from. Configure paths with `CTI_VISIO_TEMPLATE_PATHS`
+(semicolon-separated); the server also reads Visio's own
+`Application.TemplatePaths`.
+
+- **`list_templates`** — `{"category"?, "limit"?, "offset"?}`. Returns `{total, returned, templates: [{name, path, category, format}]}`. `category` filter is a substring on the parent directory name.
+- **`find_templates`** — `{"query", "limit"?}`. Rank-search by name. Exact > substring > fuzzy.
+- **`template_index_status`** — paths, count, errors. Diagnose empty results.
+- **`reindex_templates`** — `{"force"?}`. Rebuild the cache. Cheap (no Visio open needed) — fine to call on demand.
+
+`create_visio_file` accepts `"template": "<name>"` in addition to the
+existing `"template_path"` to look up a template from the index by name.
+The two are mutually exclusive; omit both for a blank document.
+
 ### Stencil Tools
 
 These find master shapes in your stencil library so future drop calls

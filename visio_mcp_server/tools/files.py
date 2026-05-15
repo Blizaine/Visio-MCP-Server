@@ -19,7 +19,7 @@ from ..com.document import (
     open_document,
 )
 from ..com.undo import undo_scope
-from ..errors import envelope
+from ..errors import InvalidArgument, envelope
 from ..server_instance import mcp
 
 DEFAULT_SAVE_PATH = os.path.expandvars(r"%USERPROFILE%\Documents")
@@ -27,18 +27,53 @@ DEFAULT_SAVE_PATH = os.path.expandvars(r"%USERPROFILE%\Documents")
 
 @mcp.tool()
 @envelope("create_visio_file")
-async def create_visio_file(template_path: Optional[str] = None, save_path: Optional[str] = None) -> dict:
+async def create_visio_file(template_path: Optional[str] = None,
+                            save_path: Optional[str] = None,
+                            template: Optional[str] = None) -> dict:
     """Create a new Visio file.
 
+    Use `template` for branded starter templates the model has discovered
+    via `list_templates`/`find_templates` — looked up in the template
+    index by short name. Use `template_path` when you have a full
+    absolute path. Pass neither for a blank document.
+
     Args:
-        template_path: Path to a Visio template (.vstx, .vst). Optional.
+        template_path: Absolute path to a Visio template (.vstx, .vst,
+                      .vsdx, .vstm). Mutually exclusive with `template`.
         save_path: Where to save the file. If a bare filename, saved under
-                  the user's Documents folder. If omitted, an auto-named file
-                  is saved there.
+                  the user's Documents folder. If omitted, an auto-named
+                  file is saved there.
+        template: Template name (matches the `name` field returned by
+                 `list_templates`). Resolved against the template index;
+                 falls through to the resolved absolute path. Mutually
+                 exclusive with `template_path`.
 
     Returns:
-        {"path": str} — the path the file was saved to.
+        {"path": str, "template_used": str|null} — the path the file was
+        saved to, and the template name/path that seeded it (null for
+        blank documents).
     """
+    if template and template_path:
+        raise InvalidArgument(
+            "create_visio_file: pass either `template` or `template_path`, not both",
+            details={"template": template, "template_path": template_path},
+        )
+
+    resolved_template_path: Optional[str] = template_path
+    template_used: Optional[str] = template_path
+    if template:
+        from ..com import templates as _templates  # local import: avoid loading
+                                                   # template module at server start
+        entry = _templates.get_template(template)
+        if entry is None:
+            raise InvalidArgument(
+                f"Template {template!r} not in index. Try `list_templates` or "
+                "`reindex_templates` if you recently added it.",
+                details={"template": template},
+            )
+        resolved_template_path = entry.path
+        template_used = entry.name
+
     if not save_path:
         save_path = os.path.join(DEFAULT_SAVE_PATH, f"New_Diagram_{int(time.time())}.vsdx")
     elif os.path.dirname(save_path) == "":
@@ -47,8 +82,8 @@ async def create_visio_file(template_path: Optional[str] = None, save_path: Opti
     os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
 
     with undo_scope("Create Visio document"):
-        create_document(template_path, save_path)
-    return {"path": save_path}
+        create_document(resolved_template_path, save_path)
+    return {"path": save_path, "template_used": template_used}
 
 
 @mcp.tool()
