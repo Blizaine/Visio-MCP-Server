@@ -23,9 +23,56 @@ from ..com.document import (
     find_shape_on_page,
     read_shape_data,
 )
+from ..com.stencils import get_or_open_stencil
 from ..com.undo import undo_scope
-from ..errors import ShapeNotFound, envelope
+from ..errors import InvalidArgument, ShapeNotFound, envelope
 from ..server_instance import mcp
+from .styling import apply_connector_style
+
+
+def drop_connector(page, connector_master=None, stencil_doc_cache=None):
+    """Create a connector shape on `page`.
+
+    With `connector_master=None` (default), uses Visio's built-in
+    `ConnectorToolDataObject` — the dynamic right-angle connector that
+    standard `connect_shapes` already produced.
+
+    With `connector_master={"stencil": "...", "master": "..."}`, drops
+    an instance of the specified stencil master and uses that as the
+    connector. AV diagrams often use branded cable masters (e.g.,
+    Crestron CresFiber, Extron DTP cabling) instead of the generic line.
+
+    `stencil_doc_cache` is an optional `{stencil_name: com_doc}` dict so
+    callers (batch operations) can avoid reopening the same stencil
+    repeatedly. Single-shot callers can pass None.
+    """
+    app = get_visio_app()
+    if not connector_master:
+        return page.Drop(app.ConnectorToolDataObject, 0.0, 0.0)
+
+    stencil_name = connector_master.get("stencil")
+    master_name = connector_master.get("master")
+    if not stencil_name or not master_name:
+        raise InvalidArgument(
+            "connector_master must include 'stencil' and 'master' names",
+            details={"connector_master": connector_master},
+        )
+
+    if stencil_doc_cache is not None and stencil_name in stencil_doc_cache:
+        stencil_doc = stencil_doc_cache[stencil_name]
+    else:
+        stencil_doc = get_or_open_stencil(stencil_name)
+        if stencil_doc_cache is not None:
+            stencil_doc_cache[stencil_name] = stencil_doc
+
+    try:
+        master = stencil_doc.Masters.ItemU(master_name)
+    except Exception:
+        raise InvalidArgument(
+            f"Connector master {master_name!r} not found in stencil {stencil_name!r}",
+            details={"stencil": stencil_name, "master": master_name},
+        )
+    return page.Drop(master, 0.0, 0.0)
 
 
 @mcp.tool()
@@ -96,8 +143,20 @@ async def add_shape(file_path: str, shape_type: str, x: float, y: float,
 @envelope("connect_shapes")
 async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
                          connector_type: Optional[str] = "Dynamic",
-                         page_name: Optional[str] = None) -> dict:
+                         page_name: Optional[str] = None,
+                         label: Optional[str] = None,
+                         color: Optional[str] = None,
+                         weight: Optional[float] = None,
+                         pattern: Optional[int] = None,
+                         connector_master: Optional[dict] = None) -> dict:
     """Connect two shapes with a single connector.
+
+    For AV signal flows, this is how you encode signal type visually —
+    yellow audio, red video, blue network, etc. Pass `label`, `color`,
+    `weight`, `pattern` to overlay a visual convention; use
+    `connector_master` to use a stencil-defined cable shape (e.g., a
+    Crestron-branded CresFiber connector) instead of the default
+    dynamic connector.
 
     Prefer `connect_shapes_bulk` when adding more than one connection.
     Does not auto-save; call `save_document` or `close_document`.
@@ -110,13 +169,23 @@ async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
                        accepted but currently routes as Dynamic until real
                        curved-connector support lands in a later phase.
         page_name: Page the shapes live on. Defaults to the active page.
+        label: Optional text label placed on the connector (Visio
+              displays it midway along the route).
+        color: Connector line color. Accepts `#RRGGBB`, `RGB(r,g,b)`, or
+              a named color (red, blue, green, yellow, ...).
+        weight: Line thickness in points.
+        pattern: Line pattern code. 0 = no line, 1 = solid, 2-23 = various
+                dashes (same enum as `set_shape_line`).
+        connector_master: Optional `{"stencil": str, "master": str}` dict
+                         to use a stencil-defined connector master
+                         instead of the default. Stencil must be in the
+                         index (`reindex_stencils` if not).
 
     Returns:
         {"connector_id": int, "shape1_id": int, "shape2_id": int,
-         "connector_type": str, "page_name": str}
+         "connector_type": str, "page_name": str, "applied_style": dict|null}
     """
     handle = ensure_document_open(file_path)
-    app = get_visio_app()
     page = handle.get_page(page_name)
 
     shape1 = find_shape_on_page(page, shape1_id)
@@ -128,7 +197,7 @@ async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
         )
 
     with undo_scope("Connect shapes"):
-        connector = page.Drop(app.ConnectorToolDataObject, 0.0, 0.0)
+        connector = drop_connector(page, connector_master=connector_master)
 
         # ShapeRouteStyle: 2 = visLORouteStraight; default leaves Visio's
         # dynamic right-angle routing.
@@ -143,12 +212,17 @@ async def connect_shapes(file_path: str, shape1_id: int, shape2_id: int,
         connector.Cells("BeginX").GlueTo(shape1.Cells("PinX"))
         connector.Cells("EndX").GlueTo(shape2.Cells("PinX"))
 
+        applied_style = apply_connector_style(
+            connector, label=label, color=color, weight=weight, pattern=pattern,
+        )
+
     return {
         "connector_id": int(connector.ID),
         "shape1_id": shape1_id,
         "shape2_id": shape2_id,
         "connector_type": connector_type or "Dynamic",
         "page_name": page.Name,
+        "applied_style": applied_style if applied_style else None,
     }
 
 

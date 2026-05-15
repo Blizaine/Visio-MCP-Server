@@ -331,7 +331,7 @@ disabled during the batch, single undo scope, no per-op save — typically
 5-20x faster end-to-end.
 
 - **`add_shapes`** — `{"file_path", "shapes": [{"shape_type", "x", "y", "width"?, "height"?, "text"?}, ...], "page_name"?}`. Each entry mirrors `add_shape`'s parameters; `text` (optional) sets the shape's text inline so you don't need a separate `add_text` call.
-- **`connect_shapes_bulk`** — `{"file_path", "connections": [{"shape1_id", "shape2_id", "connector_type"?}, ...], "page_name"?}`.
+- **`connect_shapes_bulk`** — `{"file_path", "connections": [...], "page_name"?}`. Each connection accepts `{"shape1_id", "shape2_id", "connector_type"?, "label"?, "color"?, "weight"?, "pattern"?, "connector_master"?}`. The latter five let you encode signal type (audio/video/control/network) visually per connection — color, line weight, dash pattern, label, or a stencil-defined connector master like `{"stencil": "Crestron", "master": "CresFiber"}`.
 - **`style_shapes`** — `{"file_path", "updates": [{"shape_id", "fill"?, "line"?, "text"?, "text_format"?}, ...], "page_name"?}`. `fill` / `line` / `text_format` are sub-objects with the same shape as `set_shape_fill` / `set_shape_line` / `set_shape_text_format`. `text` sets `shape.Text` directly.
 - **`delete_shapes`** — `{"file_path", "shape_ids": [int, ...], "page_name"?}`. All-or-nothing: if any ID is missing, the whole batch rolls back.
 - **`transform_shapes`** — `{"file_path", "updates": [{"shape_id", "x"?, "y"?, "width"?, "height"?, "angle_degrees"?}, ...], "page_name"?}`. Move, resize, and/or rotate. Partial updates supported.

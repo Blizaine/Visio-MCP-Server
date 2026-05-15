@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (Phase 11 — AV-grade connectors, v3.5.0)
+Signal-typing for AV diagrams: connectors now carry visual semantics.
+Yellow lines for audio, red for video, green for control, blue for
+network — whatever your team standardizes on — encoded per-connection
+in the same batch call that creates them.
+
+- `connect_shapes` gains 5 new optional parameters:
+  - `label` — text the connector displays midway along its route.
+  - `color` — line color (same parser as `set_shape_line`).
+  - `weight` — line thickness in points.
+  - `pattern` — dash pattern (0=no line, 1=solid, 2-23=dashes).
+  - `connector_master` — `{"stencil": str, "master": str}` to use a
+    stencil-defined connector master (branded cable masters etc.)
+    instead of the default dynamic connector.
+  Response gains `applied_style` showing what was applied.
+- `connect_shapes_bulk` — each entry in `connections` accepts the same
+  five fields, so an entire AV signal flow's mixed signal types land
+  in a single batch call. Pre-opens every distinct `connector_master`
+  stencil before any drops so typos fail fast.
+- Internal: `drop_connector(page, connector_master?, stencil_doc_cache?)`
+  helper in `tools/shapes.py` centralizes connector creation (default
+  vs. stencil-master). `apply_connector_style()` in `tools/styling.py`
+  reuses `apply_line` so connector styling is identical to shape
+  styling. Both helpers shared by single + batch tools.
+- Package version 3.4.0 → 3.5.0 (additive; no breaking changes).
+- Tool count unchanged at 38 — both new capabilities ride on existing
+  tools.
+
+### Verification
+Smoke test extended to drive a 6-edge AV-style signal flow:
+- 2 video runs (red, 1.5pt, label="HDMI")
+- 1 control run (green, dashed, label="Cresnet")
+- 2 audio runs (orange, 1pt, label="Audio")
+- 1 network run (blue, 2pt, label="1Gb Ethernet")
+All 6 connectors reported applied_style; labels visible in `list_shapes`
+output. Batch wall-clock for 7 shapes + 6 styled connectors + 7 style
+applies remains 0.42s.
+
 ### Added (Phase 10 — template discovery, v3.4.0)
 Closes the third gap in the discovery story: stencils (Phase 7),
 masters (Phase 8), shape data (Phase 9), and now branded templates.

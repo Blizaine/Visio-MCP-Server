@@ -130,6 +130,36 @@ def apply_line(shape, line: dict) -> dict:
     return applied
 
 
+def apply_connector_style(connector, label=None, color=None,
+                          weight=None, pattern=None) -> dict:
+    """Apply AV-style overlays to a connector shape.
+
+    All four parameters are optional; pass only what you want to change.
+    Color/weight/pattern reuse `apply_line` so the visual semantics are
+    identical to `set_shape_line`. `label` sets the connector's `Text`
+    (Visio displays this midway along the route).
+
+    Returns a dict of what was applied: `{"label"?, "line"?}` where the
+    line sub-dict has whatever `apply_line` recorded.
+    """
+    if all(v is None for v in (label, color, weight, pattern)):
+        return {}
+    applied: dict = {}
+    if label is not None:
+        connector.Text = str(label)
+        applied["label"] = str(label)
+    line_spec = {}
+    if color is not None:
+        line_spec["color"] = color
+    if weight is not None:
+        line_spec["weight"] = weight
+    if pattern is not None:
+        line_spec["pattern"] = pattern
+    if line_spec:
+        applied["line"] = apply_line(connector, line_spec)
+    return applied
+
+
 def apply_text_format(shape, doc, text_format: dict) -> dict:
     """Apply a text_format spec to a shape.
 

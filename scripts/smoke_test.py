@@ -271,18 +271,43 @@ async def run() -> None:
             if len(shape_ids) != len(batch_shapes):
                 raise SystemExit(f"FAIL: add_shapes returned {len(shape_ids)} shapes, expected {len(batch_shapes)}")
 
-            # 6 connectors in one call.
+            # 6 connectors in one call — Phase 11 coverage: each connection
+            # carries its own AV signal-type styling (label/color/weight).
             connections = [
-                {"shape1_id": shape_ids[0], "shape2_id": shape_ids[1], "connector_type": "Straight"},
-                {"shape1_id": shape_ids[1], "shape2_id": shape_ids[2], "connector_type": "Straight"},
-                {"shape1_id": shape_ids[0], "shape2_id": shape_ids[3], "connector_type": "Straight"},
-                {"shape1_id": shape_ids[3], "shape2_id": shape_ids[4], "connector_type": "Straight"},
-                {"shape1_id": shape_ids[4], "shape2_id": shape_ids[5], "connector_type": "Straight"},
-                {"shape1_id": shape_ids[3], "shape2_id": shape_ids[6], "connector_type": "Straight"},
+                # Top row: video signal flow (red, solid, 1.5pt)
+                {"shape1_id": shape_ids[0], "shape2_id": shape_ids[1],
+                 "connector_type": "Straight", "label": "HDMI",
+                 "color": "#FF0000", "weight": 1.5},
+                {"shape1_id": shape_ids[1], "shape2_id": shape_ids[2],
+                 "connector_type": "Straight", "label": "HDMI",
+                 "color": "#FF0000", "weight": 1.5},
+                # Down the left column: control wiring (green, dashed)
+                {"shape1_id": shape_ids[0], "shape2_id": shape_ids[3],
+                 "connector_type": "Straight", "label": "Cresnet",
+                 "color": "#00AA00", "weight": 1.0, "pattern": 2},
+                # Middle row: audio signal (yellow/orange, solid)
+                {"shape1_id": shape_ids[3], "shape2_id": shape_ids[4],
+                 "connector_type": "Straight", "label": "Audio",
+                 "color": "#FFAA00", "weight": 1.0},
+                {"shape1_id": shape_ids[4], "shape2_id": shape_ids[5],
+                 "connector_type": "Straight", "label": "Audio",
+                 "color": "#FFAA00", "weight": 1.0},
+                # Network drop (blue, thicker)
+                {"shape1_id": shape_ids[3], "shape2_id": shape_ids[6],
+                 "connector_type": "Straight", "label": "1Gb Ethernet",
+                 "color": "#0066CC", "weight": 2.0},
             ]
-            await _expect_ok(session, "connect_shapes_bulk", {
+            bulk_conn_data = await _expect_ok(session, "connect_shapes_bulk", {
                 "file_path": batch_path, "connections": connections,
             })
+            styled_count = sum(1 for c in bulk_conn_data["connectors"]
+                               if c.get("applied_style"))
+            if styled_count != len(connections):
+                raise SystemExit(
+                    f"FAIL: expected all {len(connections)} connectors to report applied_style, "
+                    f"got {styled_count}"
+                )
+            print(f">>> {styled_count} connectors styled (AV signal types: HDMI, Cresnet, Audio, 1Gb)")
 
             # Style every shape blue with white bold text — in one call.
             style_updates = [

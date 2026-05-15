@@ -22,10 +22,12 @@ from typing import Optional
 
 from ..com.app import get_visio_app
 from ..com.document import ensure_document_open, find_shape_on_page
+from ..com.stencils import get_or_open_stencil
 from ..com.undo import undo_scope
 from ..errors import InvalidArgument, ShapeNotFound, envelope
 from ..server_instance import mcp
-from .styling import apply_fill, apply_line, apply_text_format
+from .shapes import drop_connector
+from .styling import apply_connector_style, apply_fill, apply_line, apply_text_format
 
 
 @contextmanager
@@ -146,10 +148,24 @@ async def connect_shapes_bulk(file_path: str, connections: list,
     """Create many connectors in a single batch. Preferred over multiple
     `connect_shapes` calls.
 
+    For AV signal flows, each connection can carry its own visual
+    semantics — yellow for audio, red for video, blue for network,
+    different weights/patterns, optional text labels. This is where the
+    diagram's signal-typing actually lives.
+
     Each entry in `connections`:
         {
           "shape1_id": int, "shape2_id": int,
-          "connector_type": "Dynamic" | "Straight"   # optional, default "Dynamic"
+          "connector_type": "Dynamic" | "Straight",   # optional
+          "label"?: str,                              # text on the connector
+          "color"?: str,                              # #RRGGBB, RGB(...), named
+          "weight"?: float,                           # line weight in points
+          "pattern"?: int,                            # line pattern (0=no line,
+                                                      #  1=solid, 2-23=dashes)
+          "connector_master"?: {"stencil": str, "master": str}
+                                                      # optional stencil-based
+                                                      # connector (e.g. branded
+                                                      # cable masters)
         }
 
     Does not auto-save.
@@ -161,14 +177,29 @@ async def connect_shapes_bulk(file_path: str, connections: list,
 
     Returns:
         {"page_name": str, "count": int,
-         "connectors": [{"connector_id", "shape1_id", "shape2_id", "connector_type"}]}
+         "connectors": [{"connector_id", "shape1_id", "shape2_id",
+                         "connector_type", "applied_style": dict|null}]}
     """
     if not connections:
         raise InvalidArgument("connect_shapes_bulk called with empty connections list")
 
     handle = ensure_document_open(file_path)
-    app = get_visio_app()
     page = handle.get_page(page_name)
+
+    # Pre-open every distinct connector-master stencil before any drops,
+    # so a typo'd stencil name fails fast (same pattern as drop_masters).
+    stencil_doc_cache: dict = {}
+    for i, conn in enumerate(connections):
+        cm = conn.get("connector_master")
+        if cm:
+            sname = cm.get("stencil")
+            if not sname:
+                raise InvalidArgument(
+                    f"connections[{i}]: connector_master missing 'stencil'",
+                    details={"index": i, "spec": conn},
+                )
+            if sname not in stencil_doc_cache:
+                stencil_doc_cache[sname] = get_or_open_stencil(sname)
 
     results = []
     with _batch_context(f"Connect {len(connections)} pairs"):
@@ -191,7 +222,11 @@ async def connect_shapes_bulk(file_path: str, connections: list,
                     details={"index": i, "shape1_id": s1_id, "shape2_id": s2_id, "page_name": page.Name},
                 )
 
-            connector = page.Drop(app.ConnectorToolDataObject, 0.0, 0.0)
+            connector = drop_connector(
+                page,
+                connector_master=conn.get("connector_master"),
+                stencil_doc_cache=stencil_doc_cache,
+            )
             if (ctype or "").lower() == "straight":
                 try:
                     connector.Cells("ShapeRouteStyle").Formula = "2"
@@ -200,11 +235,20 @@ async def connect_shapes_bulk(file_path: str, connections: list,
             connector.Cells("BeginX").GlueTo(s1.Cells("PinX"))
             connector.Cells("EndX").GlueTo(s2.Cells("PinX"))
 
+            applied_style = apply_connector_style(
+                connector,
+                label=conn.get("label"),
+                color=conn.get("color"),
+                weight=conn.get("weight"),
+                pattern=conn.get("pattern"),
+            )
+
             results.append({
                 "connector_id": int(connector.ID),
                 "shape1_id": s1_id,
                 "shape2_id": s2_id,
                 "connector_type": ctype or "Dynamic",
+                "applied_style": applied_style if applied_style else None,
             })
 
     return {"page_name": page.Name, "count": len(results), "connectors": results}
